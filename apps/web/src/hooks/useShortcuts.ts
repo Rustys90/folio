@@ -7,6 +7,8 @@ export interface ShortcutHandlers {
   onNewPage: () => void;
   /** Toggle dark mode. */
   onToggleDark: () => void;
+  /** Start a comment on the current block/selection. */
+  onAddComment: () => void;
 }
 
 /**
@@ -17,14 +19,27 @@ export interface ShortcutHandlers {
  * - Cmd/Ctrl+D — toggle dark mode (preventDefault stops the browser's
  *   bookmark shortcut; reserved combos like Cmd/Ctrl+N or T may still win
  *   in some browsers — the desktop app is unaffected)
+ * - Cmd/Ctrl+Shift+M — add a comment on the current block/selection
  *
- * All three fire anywhere in the app, including inside the editor, because
+ * All four fire anywhere in the app, including inside the editor, because
  * they are workspace-level actions.
  */
-export function useShortcuts({ onCommandPalette, onNewPage, onToggleDark }: ShortcutHandlers) {
+export function useShortcuts({
+  onCommandPalette,
+  onNewPage,
+  onToggleDark,
+  onAddComment,
+}: ShortcutHandlers) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) return;
+      if (!(event.metaKey || event.ctrlKey)) return;
+      // Shift combos are only claimed for the comment shortcut.
+      if (event.shiftKey && !event.altKey && event.key.toLowerCase() === 'm') {
+        event.preventDefault();
+        onAddComment();
+        return;
+      }
+      if (event.shiftKey || event.altKey) return;
       switch (event.key.toLowerCase()) {
         case 'k':
           event.preventDefault();
@@ -44,7 +59,7 @@ export function useShortcuts({ onCommandPalette, onNewPage, onToggleDark }: Shor
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onCommandPalette, onNewPage, onToggleDark]);
+  }, [onCommandPalette, onNewPage, onToggleDark, onAddComment]);
 }
 
 /** True on macOS/iOS — used to render ⌘ instead of Ctrl in shortcut hints. */
