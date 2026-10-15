@@ -6,7 +6,8 @@ export type PropertyType =
   | 'select'
   | 'date'
   | 'relation'
-  | 'rollup';
+  | 'rollup'
+  | 'formula';
 export type DatabaseView = 'table' | 'kanban' | 'calendar' | 'gallery';
 
 /** Aggregation a rollup property computes over its linked rows. */
@@ -24,7 +25,8 @@ export const ROLLUP_FNS: { fn: RollupFn; label: string }[] = [
  * A column definition.
  *
  * `options` only applies to `select` properties. `relation*` only applies to
- * `relation` properties; `rollup*` only applies to `rollup` properties.
+ * `relation` properties; `rollup*` only applies to `rollup` properties;
+ * `formulaExpression` only applies to `formula` properties.
  * Databases serialized before relations existed simply omit these fields —
  * every helper below treats a missing field as "not configured".
  */
@@ -47,6 +49,11 @@ export interface PropertyDef {
   rollupPropertyId?: string;
   /** Rollup: the aggregation to compute. */
   rollupFn?: RollupFn;
+  /**
+   * Formula: the expression to evaluate, e.g. `prop("Price") * prop("Qty")`.
+   * Formula cells are computed on render and never stored.
+   */
+  formulaExpression?: string;
 }
 
 /**
@@ -91,6 +98,11 @@ export function isRelationProperty(prop: PropertyDef): boolean {
 /** True when the property is a rollup column. Type guard for old data. */
 export function isRollupProperty(prop: PropertyDef): boolean {
   return prop.type === 'rollup';
+}
+
+/** True when the property is a formula column. Type guard for old data. */
+export function isFormulaProperty(prop: PropertyDef): boolean {
+  return prop.type === 'formula';
 }
 
 /**
