@@ -209,3 +209,26 @@
   user-select: none;
   white-space: nowrap;
 }
+
+/* Image blocks — inserted from a page's attachments; the node stores only the
+   attachment id and resolves the URL through the host's resolver. */
+.folio-image {
+  margin: 1em 0;
+}
+.folio-image img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--color-hairline);
+  box-shadow: var(--shadow-glass);
+}
+.folio-image-missing {
+  border: 1px dashed var(--color-hairline);
+  border-radius: var(--radius-control);
+  padding: 1.5rem;
+  text-align: center;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  color: var(--color-ink-faint);
+}
