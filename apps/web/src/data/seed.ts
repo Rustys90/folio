@@ -1,4 +1,5 @@
 import type { FolioPage } from '../types';
+import type { FolioDatabase } from '../database-types';
 
 /**
  * Seed workspace — real starter content, no lorem ipsum.
@@ -33,6 +34,125 @@ export const seedPages: FolioPage[] = [
     icon: '🗺️',
     parentId: null,
     updatedAt: Date.now(),
+  },
+];
+
+/** ISO date (YYYY-MM-DD) n days from today — keeps seed due dates sensible. */
+function isoDaysFromNow(days: number): string {
+  return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * Seed databases — one realistic project tracker. Statuses line up with the
+ * kanban group-by so the board view works out of the box.
+ */
+export const seedDatabases: FolioDatabase[] = [
+  {
+    id: 'db-project-tasks',
+    title: 'Project tasks',
+    icon: '🗂️',
+    view: 'table',
+    kanbanGroupBy: 'prop-status',
+    updatedAt: Date.now(),
+    properties: [
+      { id: 'prop-task', name: 'Task', type: 'text' },
+      {
+        id: 'prop-status',
+        name: 'Status',
+        type: 'select',
+        options: ['Todo', 'In progress', 'Done'],
+      },
+      {
+        id: 'prop-priority',
+        name: 'Priority',
+        type: 'select',
+        options: ['Low', 'Medium', 'High'],
+      },
+      { id: 'prop-due', name: 'Due', type: 'date' },
+      { id: 'prop-estimate', name: 'Est. (hrs)', type: 'number' },
+    ],
+    rows: [
+      {
+        id: 'row-ship-db-views',
+        cells: {
+          'prop-task': 'Ship database table + kanban views',
+          'prop-status': 'In progress',
+          'prop-priority': 'High',
+          'prop-due': isoDaysFromNow(3),
+          'prop-estimate': 12,
+        },
+      },
+      {
+        id: 'row-triage-reconnect',
+        cells: {
+          'prop-task': 'Triage sync-server reconnect loop',
+          'prop-status': 'In progress',
+          'prop-priority': 'High',
+          'prop-due': isoDaysFromNow(2),
+          'prop-estimate': 8,
+        },
+      },
+      {
+        id: 'row-kanban-polish',
+        cells: {
+          'prop-task': 'Polish kanban drag-over states',
+          'prop-status': 'Todo',
+          'prop-priority': 'Medium',
+          'prop-due': isoDaysFromNow(5),
+          'prop-estimate': 4,
+        },
+      },
+      {
+        id: 'row-token-audit',
+        cells: {
+          'prop-task': 'Audit dark-mode token contrast',
+          'prop-status': 'Todo',
+          'prop-priority': 'Medium',
+          'prop-due': isoDaysFromNow(7),
+          'prop-estimate': 5,
+        },
+      },
+      {
+        id: 'row-import-spec',
+        cells: {
+          'prop-task': 'Write Notion/Markdown import spec',
+          'prop-status': 'Todo',
+          'prop-priority': 'Medium',
+          'prop-due': isoDaysFromNow(10),
+          'prop-estimate': 6,
+        },
+      },
+      {
+        id: 'row-tauri-notes',
+        cells: {
+          'prop-task': 'Draft Tauri desktop packaging notes',
+          'prop-status': 'Todo',
+          'prop-priority': 'Low',
+          'prop-due': isoDaysFromNow(14),
+          'prop-estimate': 3,
+        },
+      },
+      {
+        id: 'row-offline-copy',
+        cells: {
+          'prop-task': 'Fix offline banner copy in TopBar',
+          'prop-status': 'Done',
+          'prop-priority': 'Low',
+          'prop-due': isoDaysFromNow(-1),
+          'prop-estimate': 2,
+        },
+      },
+      {
+        id: 'row-yjs-smoke',
+        cells: {
+          'prop-task': 'Add Yjs persistence smoke test',
+          'prop-status': 'Done',
+          'prop-priority': 'Medium',
+          'prop-due': isoDaysFromNow(-3),
+          'prop-estimate': 4,
+        },
+      },
+    ],
   },
 ];
 
