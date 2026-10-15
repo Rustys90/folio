@@ -1,5 +1,13 @@
 @import 'tailwindcss';
 
+/* Tailwind v4 only auto-scans the Vite root — explicitly include the
+   workspace packages so their utilities (fixed, inset-0, z-50, etc.)
+   are generated. Without this, Modal and other @folio/ui components
+   render unpositioned. */
+@source "../../../packages/ui/src";
+@source "../../../packages/editor/src";
+@source "../../../packages/sync/src";
+
 /* Folio app shell — layout, liquid glass, and motion. */
 
 html,
