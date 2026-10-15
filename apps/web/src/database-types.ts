@@ -1,7 +1,7 @@
 /** Database (table / kanban) types for Folio. */
 
 export type PropertyType = 'text' | 'number' | 'select' | 'date';
-export type DatabaseView = 'table' | 'kanban';
+export type DatabaseView = 'table' | 'kanban' | 'calendar' | 'gallery';
 
 /** A column definition. `options` only applies to `select` properties. */
 export interface PropertyDef {
@@ -29,6 +29,8 @@ export interface FolioDatabase {
   view: DatabaseView;
   /** Property id used to group kanban columns; must reference a `select` property. */
   kanbanGroupBy: string | null;
+  /** Property id driving the calendar view; must reference a `date` property. */
+  calendarDateProp: string | null;
   updatedAt: number;
 }
 
@@ -52,4 +54,18 @@ export function kanbanGroupProperty(db: FolioDatabase): PropertyDef | undefined 
   return db.properties.find(
     (p) => p.id === db.kanbanGroupBy && p.type === 'select',
   );
+}
+
+/**
+ * The date property the calendar view is driven by: the stored
+ * `calendarDateProp` when it still references a date property, otherwise the
+ * first date property. Mirrors `kanbanGroupProperty`, with a first-date
+ * fallback so the calendar works even if the stored id is stale.
+ */
+export function calendarDateProperty(db: FolioDatabase): PropertyDef | undefined {
+  const stored = db.calendarDateProp ?? null;
+  const byId = stored
+    ? db.properties.find((p) => p.id === stored && p.type === 'date')
+    : undefined;
+  return byId ?? db.properties.find((p) => p.type === 'date');
 }
