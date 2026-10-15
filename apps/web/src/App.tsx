@@ -17,6 +17,7 @@ import { DatabaseTable } from './components/DatabaseTable';
 import { DatabaseKanban } from './components/DatabaseKanban';
 import { DatabaseCalendar } from './components/DatabaseCalendar';
 import { DatabaseGallery } from './components/DatabaseGallery';
+import { DatabaseTimeline } from './components/DatabaseTimeline';
 import { CommandPalette } from './components/CommandPalette';
 import { CommentsPanel } from './components/Comments';
 import { AttachmentsPanel } from './components/Attachments';
@@ -423,6 +424,8 @@ export function App() {
         view: 'table',
         kanbanGroupBy: statusPropId,
         calendarDateProp: null,
+        timelineStartProp: null,
+        timelineEndProp: null,
         updatedAt: Date.now(),
       };
       setDatabases((prev) => [...prev, db]);
@@ -475,6 +478,12 @@ export function App() {
           // First time the calendar is selected, drive it by the first date property.
           if (view === 'calendar' && (next.calendarDateProp ?? null) === null) {
             next.calendarDateProp = d.properties.find((p) => p.type === 'date')?.id ?? null;
+          }
+          // First time the timeline is selected, drive it by the first two date properties.
+          if (view === 'timeline' && (next.timelineStartProp ?? null) === null) {
+            const dateProps = d.properties.filter((p) => p.type === 'date');
+            next.timelineStartProp = dateProps[0]?.id ?? null;
+            next.timelineEndProp = dateProps[1]?.id ?? null;
           }
           return next;
         }),
@@ -848,8 +857,15 @@ export function App() {
                       databases={databases}
                       onChange={handleDatabaseChange}
                     />
-                  ) : (
+                  ) : selectedDb.view === 'gallery' ? (
                     <DatabaseGallery
+                      key={selectedDb.id}
+                      database={selectedDb}
+                      databases={databases}
+                      onChange={handleDatabaseChange}
+                    />
+                  ) : (
+                    <DatabaseTimeline
                       key={selectedDb.id}
                       database={selectedDb}
                       databases={databases}
