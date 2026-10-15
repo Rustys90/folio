@@ -1,4 +1,7 @@
-import { Node, mergeAttributes, wrappingInputRule } from '@tiptap/core';
+import { Extension, Node, mergeAttributes, wrappingInputRule } from '@tiptap/core';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import type { EditorState } from '@tiptap/pm/state';
 
 /**
  * FolioToggle — a collapsible block container, written from scratch.
@@ -29,11 +32,7 @@ export const FolioToggle = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return [
-      'div',
-      mergeAttributes(HTMLAttributes, { 'data-folio-toggle': '' }),
-      0,
-    ];
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-folio-toggle': '' }), 0];
   },
 
   addNodeView() {
@@ -107,5 +106,73 @@ export const FolioToggle = Node.create({
         return false;
       },
     };
+  },
+});
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    folioComments: {
+      /** Replace the set of top-level block indices that carry comments. */
+      setCommentedBlocks: (indices: number[]) => ReturnType;
+    };
+  }
+}
+
+const folioCommentsKey = new PluginKey('folioComments');
+
+/**
+ * FolioComments — visual markers for block-level comments, written from scratch.
+ *
+ * The web app owns the comment data; this extension only paints. The host calls
+ * `editor.commands.setCommentedBlocks([...])` with the 0-based top-level block
+ * indices that carry unresolved threads, and each of those blocks gets a
+ * `folio-comment-anchor` node decoration (styled in editor.css). Indices are
+ * re-resolved by the host after edits, so the extension never guesses anchors.
+ */
+export const FolioComments = Extension.create({
+  name: 'folioComments',
+
+  addCommands() {
+    return {
+      setCommentedBlocks:
+        (indices: number[]) =>
+        ({ editor }) => {
+          // A meta-only transaction: no document change, just recompute decorations.
+          editor.view.dispatch(editor.state.tr.setMeta(folioCommentsKey, new Set(indices)));
+          return true;
+        },
+    };
+  },
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin<Set<number>>({
+        key: folioCommentsKey,
+        state: {
+          init: () => new Set<number>(),
+          apply: (tr, value) => {
+            const next: unknown = tr.getMeta(folioCommentsKey);
+            return next instanceof Set ? next : value;
+          },
+        },
+        props: {
+          decorations: (state: EditorState) => {
+            const indices = folioCommentsKey.getState(state);
+            if (!indices || indices.size === 0) return DecorationSet.empty;
+            const decorations: Decoration[] = [];
+            state.doc.content.forEach((node, offset, index) => {
+              if (indices.has(index)) {
+                decorations.push(
+                  Decoration.node(offset, offset + node.nodeSize, {
+                    class: 'folio-comment-anchor',
+                  }),
+                );
+              }
+            });
+            return DecorationSet.create(state.doc, decorations);
+          },
+        },
+      }),
+    ];
   },
 });
