@@ -9,6 +9,7 @@ import { createFolioDoc } from '@folio/sync/doc';
 import { createSyncProvider, type FolioSyncProvider } from '@folio/sync/provider';
 import { Button } from '@folio/ui/button';
 import { ModalRoot, ModalContent, ModalTitle, ModalDescription } from '@folio/ui/modal';
+import { cn } from '@folio/ui/cn';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { EmptyState } from './components/EmptyState';
@@ -46,6 +47,14 @@ import {
   type CommentThread,
 } from './comments';
 import { localAttachmentStore, type Attachment } from './attachments';
+import {
+  disableSharing,
+  enableSharing,
+  getShare,
+  publicPageUrl,
+  type SharedPage,
+} from './sharing';
+import { PublicPage } from './components/PublicPage';
 
 const SYNC_URL =
   typeof import.meta !== 'undefined'
@@ -143,12 +152,18 @@ function loadDatabases(): FolioDatabase[] {
   return seedDatabases;
 }
 
-/** Deep-link: `#/db/<id>` selects a database, `#/<id>` selects a page. */
-function selectionFromHash(): { pageId: string | null; dbId: string | null } {
+/** Deep-link: `#/p/<id>` opens a published page, `#/db/<id>` selects a database, `#/<id>` selects a page. */
+function selectionFromHash(): {
+  pageId: string | null;
+  dbId: string | null;
+  publicId: string | null;
+} {
+  const publicMatch = window.location.hash.match(/^#\/p\/([\w-]+)$/);
+  if (publicMatch) return { pageId: null, dbId: null, publicId: publicMatch[1]! };
   const dbMatch = window.location.hash.match(/^#\/db\/([\w-]+)$/);
-  if (dbMatch) return { pageId: null, dbId: dbMatch[1]! };
+  if (dbMatch) return { pageId: null, dbId: dbMatch[1]!, publicId: null };
   const pageMatch = window.location.hash.match(/^#\/([\w-]+)$/);
-  return { pageId: pageMatch ? pageMatch[1]! : null, dbId: null };
+  return { pageId: pageMatch ? pageMatch[1]! : null, dbId: null, publicId: null };
 }
 
 /**
@@ -175,7 +190,9 @@ export function App() {
   });
   const [shareOpen, setShareOpen] = useState(false);
   const [syncConnected, setSyncConnected] = useState<boolean | null>(null);
-  const [linkCopied, setLinkCopied] = useState(false);
+  const [publicId, setPublicId] = useState<string | null>(() => initialSelection.publicId);
+  const [share, setShare] = useState<SharedPage | null>(null);
+  const [shareLinkCopied, setShareLinkCopied] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [templatePicker, setTemplatePicker] = useState<TemplateKind | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -294,14 +311,15 @@ export function App() {
     localCommentStore.save(selectedId, threads);
   }, [threads, selectedId]);
 
-  // Deep-link the open page or database
+  // Deep-link the open page or database. The public view owns its hash.
   useEffect(() => {
+    if (publicId) return;
     window.location.hash = selectedDbId
       ? `#/db/${selectedDbId}`
       : selectedId
         ? `#/${selectedId}`
         : '';
-  }, [selectedId, selectedDbId]);
+  }, [selectedId, selectedDbId, publicId]);
 
   const selectedPage = selectedDbId ? null : (pages.find((p) => p.id === selectedId) ?? null);
   const selectedDb = databases.find((d) => d.id === selectedDbId) ?? null;
@@ -465,17 +483,42 @@ export function App() {
     [selectedDbId],
   );
 
-  const handleCopyLink = useCallback(async () => {
-    if (!selectedId) return;
-    const url = `${window.location.origin}${window.location.pathname}#/${selectedId}`;
+  /** Seed HTML for a page — used by the public view before the editor ever opens it. */
+  const seedHtmlFor = useCallback(
+    (pageId: string) => seedContent[pageId] ?? initialHtmlRef.current.get(pageId),
+    [],
+  );
+
+  const exitPublicView = useCallback(() => setPublicId(null), []);
+
+  const openShareDialog = useCallback(() => {
+    if (!selectedPage) return;
+    setShare(getShare(selectedPage.id));
+    setShareLinkCopied(false);
+    setShareOpen(true);
+  }, [selectedPage]);
+
+  /** Publish / unpublish the open page. Re-enabling keeps the same public link. */
+  const handleTogglePublish = useCallback(() => {
+    if (!selectedPage) return;
+    if (share?.enabled) {
+      disableSharing(selectedPage.id);
+      setShare(getShare(selectedPage.id));
+    } else {
+      setShare(enableSharing(selectedPage.id));
+    }
+  }, [selectedPage, share]);
+
+  const handleCopyPublicLink = useCallback(async () => {
+    if (!share?.enabled) return;
     try {
-      await navigator.clipboard.writeText(url);
-      setLinkCopied(true);
-      window.setTimeout(() => setLinkCopied(false), 2000);
+      await navigator.clipboard.writeText(publicPageUrl(share.publicId));
+      setShareLinkCopied(true);
+      window.setTimeout(() => setShareLinkCopied(false), 2000);
     } catch {
       /* clipboard unavailable */
     }
-  }, [selectedId]);
+  }, [share]);
 
   /** Capture the current block/selection as a comment anchor and open the composer. */
   const handleAddComment = useCallback(() => {
@@ -704,6 +747,23 @@ export function App() {
     setRestoreTarget(null);
   }, [restoreTarget, activeEditor, pageHistory]);
 
+  if (publicId) {
+    return (
+      <div className="h-full bg-paper text-ink">
+        <PublicPage
+          publicId={publicId}
+          pages={pages}
+          getDoc={getDoc}
+          seedHtmlFor={seedHtmlFor}
+          resolveAttachmentUrl={resolveAttachmentUrl}
+          dark={dark}
+          onToggleDark={toggleDark}
+          onExit={exitPublicView}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full bg-paper text-ink">
       <Sidebar
@@ -728,7 +788,7 @@ export function App() {
             dark={dark}
             onToggleDark={() => setDark((d) => !d)}
             syncConnected={syncConnected}
-            onShare={() => setShareOpen(true)}
+            onShare={openShareDialog}
             canShare={selectedPage !== null}
             commentCount={unresolvedCount(threads)}
             commentsOpen={commentsOpen}
@@ -953,23 +1013,67 @@ export function App() {
         </ModalContent>
       </ModalRoot>
 
-      {/* Share dialog */}
+      {/* Share dialog — publish the open page to the web. */}
       <ModalRoot open={shareOpen} onOpenChange={setShareOpen}>
         <ModalContent>
           <ModalTitle>Share this page</ModalTitle>
-          <ModalDescription>
-            {syncConnected
-              ? 'Anyone with the link sees this page live, cursors and all.'
-              : 'Copy a link to this page. Realtime sharing needs the sync server running.'}
-          </ModalDescription>
-          <div className="mt-5 flex gap-2">
-            <Button variant="primary" onClick={handleCopyLink} className="flex-1">
-              {linkCopied ? 'Link copied' : 'Copy page link'}
-            </Button>
+          <ModalDescription>Publish a read-only link anyone can open.</ModalDescription>
+
+          <div className="mt-5 flex items-center justify-between gap-4 rounded-control border border-hairline bg-paper px-4 py-3">
+            <div className="min-w-0">
+              <p className="font-sans text-sm font-medium text-ink">Publish to web</p>
+              <p className="mt-0.5 font-sans text-xs leading-relaxed text-ink-soft">
+                {share?.enabled
+                  ? 'Anyone with the link can view this page.'
+                  : 'Only you can open this page.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={share?.enabled ?? false}
+              aria-label="Publish to web"
+              onClick={handleTogglePublish}
+              className={cn(
+                'relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ease-out',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
+                share?.enabled ? 'bg-accent' : 'bg-ink/15',
+              )}
+            >
+              <span
+                aria-hidden
+                className={cn(
+                  'absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ease-out',
+                  share?.enabled ? 'translate-x-[1.375rem]' : 'translate-x-0.5',
+                )}
+              />
+            </button>
           </div>
-          <p className="mt-3 text-xs leading-relaxed text-ink-faint">
-            Folio links are local-first. Without a sync server, the link opens the page shell on
-            this device.
+
+          {share?.enabled ? (
+            <div className="mt-3">
+              <p className="font-sans text-xs font-medium text-ink-soft">Public link</p>
+              <div className="mt-1.5 flex gap-2">
+                <input
+                  readOnly
+                  value={publicPageUrl(share.publicId)}
+                  onFocus={(event) => event.target.select()}
+                  aria-label="Public link"
+                  className="min-w-0 flex-1 rounded-control border border-hairline bg-paper px-3 py-2 font-sans text-sm text-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                />
+                <Button variant="primary" onClick={handleCopyPublicLink} className="shrink-0">
+                  {shareLinkCopied ? 'Copied' : 'Copy link'}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-4 font-sans text-sm leading-relaxed text-ink-soft">
+              This page is private. Turn on publishing to share a read-only link.
+            </p>
+          )}
+
+          <p className="mt-4 text-xs leading-relaxed text-ink-faint">
+            Public links work on this device — a sync server enables true public sharing.
           </p>
         </ModalContent>
       </ModalRoot>
