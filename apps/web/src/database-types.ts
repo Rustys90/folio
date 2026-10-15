@@ -8,7 +8,7 @@ export type PropertyType =
   | 'relation'
   | 'rollup'
   | 'formula';
-export type DatabaseView = 'table' | 'kanban' | 'calendar' | 'gallery';
+export type DatabaseView = 'table' | 'kanban' | 'calendar' | 'gallery' | 'timeline';
 
 /** Aggregation a rollup property computes over its linked rows. */
 export type RollupFn = 'count' | 'sum' | 'avg' | 'min' | 'max';
@@ -79,6 +79,17 @@ export interface FolioDatabase {
   kanbanGroupBy: string | null;
   /** Property id driving the calendar view; must reference a `date` property. */
   calendarDateProp: string | null;
+  /**
+   * Property id driving the timeline's bar start; must reference a `date`
+   * property. Falls back to the first date property when unset or stale.
+   */
+  timelineStartProp: string | null;
+  /**
+   * Property id driving the timeline's bar end; must reference a `date`
+   * property. When unset or the row has no end date, the row renders as a
+   * milestone diamond at its start date.
+   */
+  timelineEndProp: string | null;
   updatedAt: number;
 }
 
@@ -227,4 +238,38 @@ export function calendarDateProperty(db: FolioDatabase): PropertyDef | undefined
     ? db.properties.find((p) => p.id === stored && p.type === 'date')
     : undefined;
   return byId ?? db.properties.find((p) => p.type === 'date');
+}
+
+/** The date properties available to the timeline, in definition order. */
+export function timelineDateProperties(db: FolioDatabase): PropertyDef[] {
+  return db.properties.filter((p) => p.type === 'date');
+}
+
+/**
+ * The date property a timeline bar starts from: the stored
+ * `timelineStartProp` when it still references a date property, otherwise the
+ * first date property. Mirrors `calendarDateProperty`.
+ */
+export function timelineStartProperty(db: FolioDatabase): PropertyDef | undefined {
+  const stored = db.timelineStartProp ?? null;
+  const byId = stored
+    ? db.properties.find((p) => p.id === stored && p.type === 'date')
+    : undefined;
+  return byId ?? db.properties.find((p) => p.type === 'date');
+}
+
+/**
+ * The date property a timeline bar ends at: the stored `timelineEndProp` when
+ * it still references a date property, otherwise the second date property.
+ * Returns undefined when the database has fewer than two date properties —
+ * callers then render every row as a milestone.
+ */
+export function timelineEndProperty(db: FolioDatabase): PropertyDef | undefined {
+  const stored = db.timelineEndProp ?? null;
+  const byId = stored
+    ? db.properties.find((p) => p.id === stored && p.type === 'date')
+    : undefined;
+  const dateProps = timelineDateProperties(db);
+  const second = dateProps[1] ?? undefined;
+  return byId ?? second;
 }
