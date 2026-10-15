@@ -1,0 +1,154 @@
+/* Folio editor styles — typography for the block canvas. */
+
+.folio-editor {
+  width: 100%;
+}
+
+.folio-prosemirror {
+  outline: none;
+  caret-color: var(--color-accent);
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  font-size: 1rem;
+  line-height: 1.7;
+  word-wrap: break-word;
+}
+
+.folio-prosemirror > * + * {
+  margin-top: 0.35em;
+}
+
+/* Headings carry the manuscript voice — serif, like a folio page. */
+.folio-prosemirror h1,
+.folio-prosemirror h2,
+.folio-prosemirror h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.folio-prosemirror h1 { font-size: 1.875rem; margin-top: 1.2em; }
+.folio-prosemirror h2 { font-size: 1.5rem; margin-top: 1.1em; }
+.folio-prosemirror h3 { font-size: 1.25rem; margin-top: 1em; }
+
+.folio-prosemirror p { margin: 0.35em 0; }
+
+.folio-prosemirror ul,
+.folio-prosemirror ol {
+  padding-left: 1.5rem;
+  margin: 0.35em 0;
+}
+.folio-prosemirror ul { list-style: disc; }
+.folio-prosemirror ol { list-style: decimal; }
+.folio-prosemirror li > p { margin: 0.15em 0; }
+.folio-prosemirror li::marker { color: var(--color-ink-faint); }
+
+.folio-prosemirror blockquote {
+  border-left: 2px solid var(--color-accent);
+  padding-left: 1rem;
+  margin: 0.75em 0;
+  color: var(--color-ink-soft);
+  font-style: italic;
+}
+
+.folio-prosemirror pre {
+  background: var(--color-paper-deep);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-control);
+  padding: 0.9rem 1.1rem;
+  margin: 0.75em 0;
+  overflow-x: auto;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+.folio-prosemirror pre code {
+  background: none;
+  padding: 0;
+}
+.folio-prosemirror :not(pre) > code {
+  background: var(--color-paper-deep);
+  border: 1px solid var(--color-hairline);
+  border-radius: 0.375rem;
+  padding: 0.1em 0.35em;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.875em;
+}
+
+.folio-prosemirror hr {
+  border: none;
+  border-top: 1px solid var(--color-hairline);
+  margin: 1.5em auto;
+  width: 100%;
+}
+
+/* Toggle — chevron floats left of the first block; siblings collapse. */
+.folio-toggle {
+  position: relative;
+  padding-left: 1.5rem;
+  margin: 0.35em 0;
+}
+.folio-toggle-chevron {
+  position: absolute;
+  left: 0;
+  top: 0.35em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.375rem;
+  color: var(--color-ink-faint);
+  cursor: pointer;
+  transition:
+    transform var(--duration-quick) var(--ease-folio),
+    background-color var(--duration-quick) var(--ease-folio),
+    color var(--duration-quick) var(--ease-folio);
+}
+.folio-toggle-chevron:hover {
+  background: var(--color-accent-soft);
+  color: var(--color-ink);
+}
+.folio-toggle-chevron svg {
+  transition: transform var(--duration-quick) var(--ease-folio);
+}
+.folio-toggle[data-open='true'] .folio-toggle-chevron svg {
+  transform: rotate(90deg);
+}
+.folio-toggle[data-open='false'] .folio-toggle-content > *:not(:first-child) {
+  display: none;
+}
+
+/* Empty-document placeholder — an invitation, not a void. */
+.folio-prosemirror.folio-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--color-ink-faint);
+  pointer-events: none;
+  height: 0;
+}
+
+/* Collaboration cursors */
+.collaboration-cursor__caret {
+  border-left: 1px solid;
+  border-right: 1px solid;
+  margin-left: -1px;
+  margin-right: -1px;
+  pointer-events: none;
+  position: relative;
+  word-break: normal;
+}
+.collaboration-cursor__label {
+  border-radius: 0.375rem 0.375rem 0.375rem 0;
+  color: #fff;
+  font-size: 0.75rem;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  left: -1px;
+  line-height: 1.2;
+  padding: 0.15rem 0.4rem;
+  position: absolute;
+  top: -1.5em;
+  user-select: none;
+  white-space: nowrap;
+}
