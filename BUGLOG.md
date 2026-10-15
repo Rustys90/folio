@@ -2,6 +2,14 @@
 
 Issues found and fixed during the v1 completion sprint. Every entry records what broke, why, and the fix — so the same bug never ships twice.
 
+## 2026-10-15 — phase2: calendar + gallery views
+
+### Calendar day panel: unsafe `properties[1]!` non-null assertion
+- **Found:** First draft of the calendar day panel resolved a "secondary" property via `database.properties[1]!` — a non-null assertion on an index that doesn't exist when a database has zero or one properties, which would crash the panel at runtime.
+- **Why:** Copied the "show something extra" instinct from kanban without accounting for degenerate databases; the `!` silenced the compiler but not the crash.
+- **Fix:** Rewrote the panel to filter `properties` (excluding the title and date props) and slice the first two — zero indexing by position, zero assertions. Empty extras render nothing.
+- **Status:** Fixed before commit. Verified via typecheck + dev-server transform.
+
 ## 2026-10-15 — v1 completion sprint
 
 ### Push pipeline: Composio file-update requires `sha` for existing files
