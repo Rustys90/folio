@@ -105,6 +105,7 @@ all welcome — start with [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 - [x] Database **calendar view**
 - [x] Database **gallery view**
+- [x] Database **timeline view** — Gantt-style bars with week/month/quarter zoom, drag-to-reschedule, edge resizing, milestones, and a today line
 - [x] Page and database **templates**
 - [x] **Import** from Markdown, CSV, and HTML
 - [x] Block-level **comments** with threads, replies, and resolve
