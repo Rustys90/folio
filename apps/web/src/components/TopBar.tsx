@@ -6,6 +6,7 @@ import {
   Kanban,
   Calendar,
   LayoutGrid,
+  GanttChart,
   MessageSquare,
   MessageSquarePlus,
   History,
@@ -67,6 +68,7 @@ const VIEW_OPTIONS: { view: DatabaseView; label: string; icon: typeof Table }[] 
   { view: 'kanban', label: 'Kanban', icon: Kanban },
   { view: 'calendar', label: 'Calendar', icon: Calendar },
   { view: 'gallery', label: 'Gallery', icon: LayoutGrid },
+  { view: 'timeline', label: 'Timeline', icon: GanttChart },
 ];
 
 /**
