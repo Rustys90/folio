@@ -1,0 +1,66 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Folio design tokens — the single source of truth for color, type, and shape.
+ * Components consume semantic tokens only (bg-paper, text-ink, border-hairline…).
+ * Never hardcode a hex value in a component file.
+ */
+@theme {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Inter, sans-serif;
+  --font-display:
+    Charter, 'Bitstream Charter', 'Sitka Text', Cambria, Georgia, serif;
+
+  /* Paper & ink — the manuscript vernacular */
+  --color-paper: #fbfbf9;
+  --color-paper-deep: #f3f3ef;
+  --color-ink: #17191d;
+  --color-ink-soft: #5f636b;
+  --color-ink-faint: #9ba0a8;
+  --color-hairline: rgba(23, 25, 29, 0.09);
+
+  /* Accent — manuscript blue */
+  --color-accent: #2e5bff;
+  --color-accent-ink: #ffffff;
+  --color-accent-soft: rgba(46, 91, 255, 0.1);
+
+  /* Liquid glass */
+  --color-glass: rgba(251, 251, 249, 0.72);
+  --shadow-glass: 0 8px 32px rgba(23, 25, 29, 0.08);
+
+  /* Shape */
+  --radius-card: 0.875rem;
+  --radius-control: 0.625rem;
+
+  /* Motion — calm, physical */
+  --ease-folio: cubic-bezier(0.32, 0.72, 0, 1);
+  --duration-quick: 160ms;
+  --duration-calm: 280ms;
+}
+
+.dark {
+  --color-paper: #0d0f12;
+  --color-paper-deep: #14171b;
+  --color-ink: #edeef0;
+  --color-ink-soft: #a7abb3;
+  --color-ink-faint: #6e737c;
+  --color-hairline: rgba(255, 255, 255, 0.09);
+
+  --color-accent: #8aa2ff;
+  --color-accent-ink: #0d0f12;
+  --color-accent-soft: rgba(138, 162, 255, 0.14);
+
+  --color-glass: rgba(13, 15, 18, 0.66);
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
