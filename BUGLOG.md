@@ -93,3 +93,17 @@ Issues found and fixed during the v1 completion sprint. Every entry records what
 - **Why:** TipTap has no stable per-block ids in this setup.
 - **Fix:** Each anchor stores `blockIndex` + verbatim `quote` (selected text, or a block excerpt). `resolveAnchorIndex` prefers the block whose text still contains the quote, falling back to the clamped creation-time index. Documented as the seam for a future Yjs-backed CommentStore (interface already in `apps/web/src/comments.ts`).
 - **Status:** Implemented. Not a bug — recorded as the anchoring contract.
+
+## 2026-10-15 — phase2: page version history
+
+### Preview unmounts would have orphaned the restore path
+- **Found (design):** First draft conditionally unmounted the FolioEditor during version preview; restore then had no live editor to write through.
+- **Why:** `activeEditor`/`editorRef` are cleared on unmount, and restore must go through TipTap commands (never direct Yjs writes) so Collaboration syncs it like a normal edit.
+- **Fix:** The editor stays mounted during preview, hidden behind `hidden` while the read-only snapshot HTML renders in its place. Restore banks a "Before restore" manual snapshot, then `activeEditor.commands.setContent(snapshot.contentHtml)` — one confirm dialog, one write path.
+- **Status:** Implemented. typecheck + eslint clean, prod build passes.
+
+### Auto-snapshot must skip identical content
+- **Found (design):** Yjs `update` events fire for remote/collaborator changes and formatting-only churn, so a naive counter would bank duplicate snapshots.
+- **Why:** Snapshot identity is HTML text; without a dedupe check the list fills with byte-identical "auto-saves".
+- **Fix:** `capture()` returns null when the editor HTML equals the newest stored version's `contentHtml`; also skips empty/placeholder-only docs. Policy: snapshot after ≥30 updates AND ≥5 min since the last auto-save, plus a flush on page switch and a "First version" baseline for pages with no history.
+- **Status:** Implemented. Store capped at 50 versions per page (`folio-history-<pageId>`), oldest evicted.
