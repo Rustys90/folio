@@ -105,6 +105,8 @@ all welcome — start with [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 - [x] Database **calendar view**
 - [x] Database **gallery view**
+- [x] Page and database **templates**
+- [x] **Import** from Markdown, CSV, and HTML
 - [ ] **Mobile** apps
 - [ ] **AI-assisted** writing features
 
