@@ -457,6 +457,8 @@ export function csvToDatabase(title: string, parsed: ParsedCsv): FolioDatabase {
     view: 'table',
     kanbanGroupBy: properties.find((p) => p.type === 'select')?.id ?? null,
     calendarDateProp: properties.find((p) => p.type === 'date')?.id ?? null,
+    timelineStartProp: properties.find((p) => p.type === 'date')?.id ?? null,
+    timelineEndProp: properties.filter((p) => p.type === 'date')[1]?.id ?? null,
     updatedAt: Date.now(),
   };
 }
