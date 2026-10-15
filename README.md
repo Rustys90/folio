@@ -103,7 +103,8 @@ all welcome — start with [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## 🔮 Roadmap
 
-- [ ] Database **calendar view**
+- [x] Database **calendar view**
+- [x] Database **gallery view**
 - [ ] **Mobile** apps
 - [ ] **AI-assisted** writing features
 
