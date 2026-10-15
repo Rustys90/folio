@@ -12,6 +12,8 @@ import { CellEditor, formatCellValue } from './database-cells';
 
 export interface DatabaseRowEditorProps {
   database: FolioDatabase;
+  /** Every database — relation and rollup cells resolve across this list. */
+  databases: FolioDatabase[];
   /** Null closes the editor. */
   row: DatabaseRow | null;
   onClose: () => void;
@@ -33,6 +35,7 @@ export function rowTitle(db: FolioDatabase, row: DatabaseRow): string {
  */
 export function DatabaseRowEditor({
   database,
+  databases,
   row,
   onClose,
   onChange,
@@ -71,6 +74,9 @@ export function DatabaseRowEditor({
                 <CellEditor
                   property={prop}
                   value={row.cells[prop.id]}
+                  database={database}
+                  databases={databases}
+                  row={row}
                   onCommit={(v) => setCell(row.id, prop.id, v)}
                   onCancel={() => {}}
                   autoFocus={false}
