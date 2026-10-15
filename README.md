@@ -18,15 +18,15 @@ write is saved locally first; sync is a bonus, not a requirement.
 
 ## ✨ See it in action
 
-| Block editor | Database table |
-|---|---|
+| Block editor                                              | Database table                                         |
+| --------------------------------------------------------- | ------------------------------------------------------ |
 | ![Typing in the Folio block editor](docs/demo/editor.gif) | ![Sorting a Folio database table](docs/demo/table.gif) |
-| *Type anywhere — markdown shortcuts just work.* | *Sortable columns, inline cell editing.* |
+| _Type anywhere — markdown shortcuts just work._           | _Sortable columns, inline cell editing._               |
 
-| Kanban board | Command palette |
-|---|---|
+| Kanban board                                                       | Command palette                                                         |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------- |
 | ![Dragging a card on the Folio kanban board](docs/demo/kanban.gif) | ![Opening the Folio command palette with Ctrl+K](docs/demo/palette.gif) |
-| *Drag cards between status columns.* | *`Ctrl/⌘+K` to search pages, or jump straight to dark mode.* |
+| _Drag cards between status columns._                               | _`Ctrl/⌘+K` to search pages, or jump straight to dark mode._            |
 
 ## 📸 Screenshots
 
@@ -57,14 +57,14 @@ write is saved locally first; sync is a bonus, not a requirement.
 
 ## 🛠️ Tech stack
 
-| Layer | Technology |
-|---|---|
-| Block editor | [TipTap 2](https://tiptap.dev) (ProseMirror) with custom extensions |
-| Realtime sync | [Yjs](https://yjs.dev) CRDTs + `y-websocket` |
-| Web app | React 19, TypeScript, Tailwind CSS v4, Vite |
-| Desktop | [Tauri](https://tauri.app) |
-| Sync server | Node.js (`server/`) |
-| Monorepo | npm workspaces — `apps/*`, `packages/*` |
+| Layer         | Technology                                                          |
+| ------------- | ------------------------------------------------------------------- |
+| Block editor  | [TipTap 2](https://tiptap.dev) (ProseMirror) with custom extensions |
+| Realtime sync | [Yjs](https://yjs.dev) CRDTs + `y-websocket`                        |
+| Web app       | React 19, TypeScript, Tailwind CSS v4, Vite                         |
+| Desktop       | [Tauri](https://tauri.app)                                          |
+| Sync server   | Node.js (`server/`)                                                 |
+| Monorepo      | npm workspaces — `apps/*`, `packages/*`                             |
 
 ## ⚡ Quickstart
 
@@ -107,6 +107,7 @@ all welcome — start with [CONTRIBUTING.md](CONTRIBUTING.md) and the
 - [x] Database **gallery view**
 - [x] Page and database **templates**
 - [x] **Import** from Markdown, CSV, and HTML
+- [x] Block-level **comments** with threads, replies, and resolve
 - [ ] **Mobile** apps
 - [ ] **AI-assisted** writing features
 
