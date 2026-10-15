@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Doc as YDoc } from 'yjs';
 import type { WebsocketProvider } from 'y-websocket';
 import type { Editor } from '@tiptap/core';
+import { History as HistoryIcon } from 'lucide-react';
 import { FolioEditor } from '@folio/editor/editor';
 import { createFolioDoc } from '@folio/sync/doc';
 import { createSyncProvider, type FolioSyncProvider } from '@folio/sync/provider';
@@ -16,11 +17,14 @@ import { DatabaseCalendar } from './components/DatabaseCalendar';
 import { DatabaseGallery } from './components/DatabaseGallery';
 import { CommandPalette } from './components/CommandPalette';
 import { CommentsPanel } from './components/Comments';
+import { PageHistory } from './components/PageHistory';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ContentSkeleton } from './components/ContentSkeleton';
 import { TemplatePicker, type TemplateKind } from './components/TemplatePicker';
 import { ImportDialog } from './components/ImportDialog';
 import { useShortcuts } from './hooks/useShortcuts';
+import { usePageHistory } from './hooks/usePageHistory';
+import { formatVersionTime, type PageVersion } from './history';
 import { seedPages, seedContent, seedDatabases } from './data/seed';
 import {
   buildDatabaseFromTemplate,
@@ -177,6 +181,10 @@ export function App() {
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentDraft, setCommentDraft] = useState<CommentDraft | null>(null);
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
+  // Version history for the open page.
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [previewVersion, setPreviewVersion] = useState<PageVersion | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<PageVersion | null>(null);
   // initialHtml for pages created from a template or an import, keyed by page id.
   // FolioEditor writes it into the Yjs doc on first open (same as seed content).
   const initialHtmlRef = useRef(new Map<string, string>());
@@ -197,6 +205,17 @@ export function App() {
     }
     return doc;
   }, []);
+
+  // Imperative handle for the live editor, shared with the history hook so
+  // snapshots read the current HTML — and restores write back through the
+  // editor, never by touching the Yjs doc directly.
+  const historyEditorRef = useRef<Editor | null>(null);
+  const pageHistory = usePageHistory(
+    selectedId,
+    selectedId ? getDoc(selectedId) : null,
+    identity,
+    historyEditorRef,
+  );
 
   // One realtime room per open page. No server configured → fully offline.
   useEffect(() => {
@@ -274,15 +293,26 @@ export function App() {
     activeEditor.commands.setCommentedBlocks([...indices]);
   }, [threads, activeEditor, selectedPage]);
 
-  const selectPage = useCallback((id: string) => {
-    setSelectedId(id);
-    setSelectedDbId(null);
-  }, []);
+  const selectPage = useCallback(
+    (id: string) => {
+      // Bank pending edits as an auto-save before the page unmounts.
+      pageHistory.flushAutoSnapshot();
+      setPreviewVersion(null);
+      setSelectedId(id);
+      setSelectedDbId(null);
+    },
+    [pageHistory],
+  );
 
-  const selectDatabase = useCallback((id: string) => {
-    setSelectedDbId(id);
-    setSelectedId(null);
-  }, []);
+  const selectDatabase = useCallback(
+    (id: string) => {
+      pageHistory.flushAutoSnapshot();
+      setPreviewVersion(null);
+      setSelectedDbId(id);
+      setSelectedId(null);
+    },
+    [pageHistory],
+  );
 
   const handleNewPage = useCallback(
     (parentId: string | null, template?: PageTemplate | null) => {
@@ -513,6 +543,20 @@ export function App() {
     onAddComment: handleAddComment,
   });
 
+  /**
+   * Restore a version. The current content is banked as a manual version
+   * first, then the snapshot is written back through the live TipTap editor —
+   * Collaboration turns it into Yjs updates, so sync partners see the
+   * restore exactly like any other edit.
+   */
+  const handleConfirmRestore = useCallback(() => {
+    if (!restoreTarget || !activeEditor) return;
+    pageHistory.saveManualVersion('Before restore');
+    activeEditor.commands.setContent(restoreTarget.contentHtml);
+    setPreviewVersion(null);
+    setRestoreTarget(null);
+  }, [restoreTarget, activeEditor, pageHistory]);
+
   return (
     <div className="flex h-full bg-paper text-ink">
       <Sidebar
@@ -544,6 +588,9 @@ export function App() {
             onToggleComments={() => setCommentsOpen((open) => !open)}
             onAddComment={handleAddComment}
             showComments={selectedPage !== null}
+            showHistory={selectedPage !== null}
+            historyOpen={historyOpen}
+            onToggleHistory={() => setHistoryOpen((open) => !open)}
           />
 
           <main className="folio-scroll folio-enter-content min-h-0 flex-1 overflow-y-auto">
@@ -580,16 +627,53 @@ export function App() {
                 </div>
               ) : selectedPage ? (
                 <div className="mx-auto w-full max-w-3xl px-8 pb-32 pt-10 md:px-12">
-                  <FolioEditor
-                    key={selectedPage.id}
-                    ydoc={getDoc(selectedPage.id)}
-                    provider={provider}
-                    user={identity}
-                    onEditorChange={setActiveEditor}
-                    initialHtml={
-                      seedContent[selectedPage.id] ?? initialHtmlRef.current.get(selectedPage.id)
-                    }
-                  />
+                  {previewVersion && (
+                    <>
+                      <div
+                        role="status"
+                        className="glass-strong mb-6 flex flex-wrap items-center gap-2 rounded-control border border-hairline px-4 py-3 shadow-glass"
+                      >
+                        <HistoryIcon className="h-4 w-4 shrink-0 text-ink-soft" aria-hidden />
+                        <p className="min-w-0 flex-1 font-sans text-sm text-ink-soft">
+                          Viewing version from {formatVersionTime(previewVersion.createdAt)} — “
+                          {previewVersion.label}”
+                        </p>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setPreviewVersion(null)}
+                        >
+                          Back to current
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => setRestoreTarget(previewVersion)}
+                        >
+                          Restore
+                        </Button>
+                      </div>
+                      <div
+                        aria-label="Version preview (read-only)"
+                        className="folio-prosemirror"
+                        dangerouslySetInnerHTML={{ __html: previewVersion.contentHtml }}
+                      />
+                    </>
+                  )}
+                  {/* Kept mounted (hidden) during preview so restores go through the live editor. */}
+                  <div className={previewVersion ? 'hidden' : undefined}>
+                    <FolioEditor
+                      key={selectedPage.id}
+                      ydoc={getDoc(selectedPage.id)}
+                      provider={provider}
+                      user={identity}
+                      onEditorChange={setActiveEditor}
+                      editorRef={historyEditorRef}
+                      initialHtml={
+                        seedContent[selectedPage.id] ?? initialHtmlRef.current.get(selectedPage.id)
+                      }
+                    />
+                  </div>
                 </div>
               ) : (
                 <EmptyState onNewPage={() => handleNewPage(null)} />
@@ -612,6 +696,18 @@ export function App() {
             onDeleteThread={handleDeleteThread}
             onFocusThread={handleFocusThread}
             onClose={() => setCommentsOpen(false)}
+          />
+        )}
+        {selectedPage && (
+          <PageHistory
+            key={selectedPage.id}
+            open={historyOpen}
+            pageId={selectedPage.id}
+            identity={identity}
+            history={pageHistory}
+            previewVersionId={previewVersion?.id ?? null}
+            onPreview={setPreviewVersion}
+            onClose={() => setHistoryOpen(false)}
           />
         )}
       </div>
@@ -650,6 +746,28 @@ export function App() {
         onImportPage={handleImportPage}
         onImportDatabase={handleImportDatabase}
       />
+
+      {/* Restore confirmation */}
+      <ModalRoot open={restoreTarget !== null} onOpenChange={(open) => {
+        if (!open) setRestoreTarget(null);
+      }}>
+        <ModalContent>
+          <ModalTitle>Restore this version?</ModalTitle>
+          <ModalDescription>
+            {restoreTarget
+              ? `The page will be replaced with “${restoreTarget.label}” from ${formatVersionTime(restoreTarget.createdAt)}. Your current content is saved as a version first, so nothing is lost.`
+              : ''}
+          </ModalDescription>
+          <div className="mt-5 flex gap-2">
+            <Button variant="ghost" onClick={() => setRestoreTarget(null)} className="flex-1">
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleConfirmRestore} className="flex-1">
+              Restore this version
+            </Button>
+          </div>
+        </ModalContent>
+      </ModalRoot>
 
       {/* Share dialog */}
       <ModalRoot open={shareOpen} onOpenChange={setShareOpen}>
