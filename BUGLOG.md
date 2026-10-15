@@ -39,3 +39,9 @@ Issues found and fixed during the v1 completion sprint. Every entry records what
 - **Why:** `reset --hard` discards all uncommitted changes to tracked files. The worker was still running.
 - **Fix:** Worker re-applied App.tsx changes post-reset (verified 8 integration points present). Re-added `folio-shimmer` CSS manually to app.css. Lesson: never `reset --hard` while workers are still writing.
 - **Status:** Fixed. Verified via grep + typecheck.
+
+### CRITICAL: Tailwind v4 not scanning packages/ui — modals rendered broken
+- **Found:** Command palette rendered at bottom of page, cut off, no backdrop. `ModalContent` had `position: static`.
+- **Why:** Tailwind v4 auto-scans only the Vite root (`apps/web/`). Utilities used exclusively in `packages/ui` (`fixed`, `inset-0`, `z-50`) were never generated.
+- **Fix:** Added `@source "../../../packages/{ui,editor,sync}/src";` to `apps/web/src/app.css`. (First attempt used wrong relative depth `../../` — fixed to `../../../`.)
+- **Status:** Fixed. Verified `.fixed` present in production CSS build.
