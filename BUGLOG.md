@@ -2,6 +2,20 @@
 
 Issues found and fixed during the v1 completion sprint. Every entry records what broke, why, and the fix — so the same bug never ships twice.
 
+## 2026-10-15 — phase2: templates + import tools
+
+### Markdown import: nested list items rendered in reverse order
+- **Found:** The clean-room list renderer's `closeFrame` emitted the still-open (most recent) item *before* the already-closed parts, so `- one / - two / nested` imported as "two, one" with the nested list in the wrong place.
+- **Why:** The open item was treated as the list head instead of the list tail; order only breaks when a list has 2+ items, so a single-item smoke test missed it.
+- **Fix:** `closeFrame` now renders `parts` first, then the open item (the open item is always the most recent). Verified with a multi-item nested/task-list fixture.
+- **Status:** Fixed before commit. Verified via parser smoke test.
+
+### Markdown import: eslint `no-control-regex` on code-span placeholders
+- **Found:** Using `\u0000` as the inline-code placeholder delimiter tripped `no-control-regex`.
+- **Why:** Control characters in regexes are banned by the lint config (and invisible in diffs).
+- **Fix:** Switched the placeholder brackets to private-use escapes `\ue000` / `\ue001` — never control chars, never collide with real text.
+- **Status:** Fixed before commit. `npx eslint .` clean.
+
 ## 2026-10-15 — phase2: calendar + gallery views
 
 ### Calendar day panel: unsafe `properties[1]!` non-null assertion
