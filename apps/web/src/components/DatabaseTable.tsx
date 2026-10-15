@@ -5,9 +5,11 @@ import {
   Calendar,
   ChevronDown,
   Hash,
+  Link2,
   List,
   Pencil,
   Plus,
+  Sigma,
   Trash2,
   Type,
   type LucideIcon,
@@ -34,8 +36,15 @@ import type {
   FolioDatabase,
   PropertyDef,
   PropertyType,
+  RollupFn,
 } from '../database-types';
-import { newDbId } from '../database-types';
+import {
+  computeRollup,
+  isRelationProperty,
+  newDbId,
+  relationTarget,
+  ROLLUP_FNS,
+} from '../database-types';
 import { CellEditor, CellValueView } from './database-cells';
 
 const TYPE_META: { type: PropertyType; label: string; icon: LucideIcon }[] = [
@@ -43,6 +52,8 @@ const TYPE_META: { type: PropertyType; label: string; icon: LucideIcon }[] = [
   { type: 'number', label: 'Number', icon: Hash },
   { type: 'select', label: 'Select', icon: List },
   { type: 'date', label: 'Date', icon: Calendar },
+  { type: 'relation', label: 'Relation', icon: Link2 },
+  { type: 'rollup', label: 'Rollup', icon: Sigma },
 ];
 
 function typeIcon(type: PropertyType): LucideIcon {
@@ -55,12 +66,17 @@ interface SortState {
 }
 
 function compareCells(a: CellValue, b: CellValue, type: PropertyType): number {
-  const emptyA = a === undefined || a === '';
-  const emptyB = b === undefined || b === '';
+  const emptyA =
+    a === undefined || a === '' || (Array.isArray(a) && a.length === 0);
+  const emptyB =
+    b === undefined || b === '' || (Array.isArray(b) && b.length === 0);
   if (emptyA && emptyB) return 0;
   if (emptyA) return 1;
   if (emptyB) return -1;
   if (type === 'number') return Number(a) - Number(b);
+  if (type === 'relation') {
+    return (a as string[]).length - (b as string[]).length;
+  }
   return String(a).localeCompare(String(b), undefined, { numeric: true });
 }
 
@@ -71,7 +87,18 @@ interface PropertyModalState {
 
 export interface DatabaseTableProps {
   database: FolioDatabase;
+  /** Every database — relations and rollups resolve across this list. */
+  databases: FolioDatabase[];
   onChange: (db: FolioDatabase) => void;
+  /** Used when an operation touches more than one database (two-way relations). */
+  onDatabasesChange: (databases: FolioDatabase[]) => void;
+}
+
+/** Non-computed properties of a database that a rollup can aggregate. */
+function aggregatableProps(db: FolioDatabase): PropertyDef[] {
+  return db.properties.filter(
+    (p) => p.type !== 'relation' && p.type !== 'rollup',
+  );
 }
 
 /**
@@ -79,7 +106,12 @@ export interface DatabaseTableProps {
  * editing, and row/column management. All mutations go through `onChange`
  * with a new immutable database object.
  */
-export function DatabaseTable({ database, onChange }: DatabaseTableProps) {
+export function DatabaseTable({
+  database,
+  databases,
+  onChange,
+  onDatabasesChange,
+}: DatabaseTableProps) {
   const [sort, setSort] = useState<SortState | null>(null);
   const [editing, setEditing] = useState<{
     rowId: string;
@@ -89,21 +121,45 @@ export function DatabaseTable({ database, onChange }: DatabaseTableProps) {
   const [propName, setPropName] = useState('');
   const [propType, setPropType] = useState<PropertyType>('text');
   const [propOptions, setPropOptions] = useState('');
+  const [relationTargetId, setRelationTargetId] = useState('');
+  const [createReverse, setCreateReverse] = useState(true);
+  const [rollupRelationId, setRollupRelationId] = useState('');
+  const [rollupPropertyId, setRollupPropertyId] = useState('');
+  const [rollupFn, setRollupFn] = useState<RollupFn>('count');
+
+  const relationProps = database.properties.filter(isRelationProperty);
 
   const sortedRows = useMemo(() => {
     if (!sort) return database.rows;
     const prop = database.properties.find((p) => p.id === sort.propertyId);
     if (!prop) return database.rows;
     const dir = sort.direction === 'asc' ? 1 : -1;
-    return [...database.rows].sort(
-      (ra, rb) => compareCells(ra.cells[prop.id], rb.cells[prop.id], prop.type) * dir,
-    );
-  }, [database.rows, database.properties, sort]);
+    return [...database.rows].sort((ra, rb) => {
+      if (prop.type === 'rollup') {
+        const va = computeRollup(prop, database, ra, databases);
+        const vb = computeRollup(prop, database, rb, databases);
+        if (va === undefined && vb === undefined) return 0;
+        if (va === undefined) return 1;
+        if (vb === undefined) return -1;
+        return (va - vb) * dir;
+      }
+      return compareCells(ra.cells[prop.id], rb.cells[prop.id], prop.type) * dir;
+    });
+  }, [database, sort, databases]);
 
   const openAddModal = () => {
     setPropName('');
     setPropType('text');
     setPropOptions('');
+    // Prefer a different database for the relation target; fall back to self.
+    setRelationTargetId(
+      databases.find((d) => d.id !== database.id)?.id ?? database.id,
+    );
+    setCreateReverse(true);
+    const firstRelation = relationProps[0];
+    setRollupRelationId(firstRelation?.id ?? '');
+    setRollupPropertyId('');
+    setRollupFn('count');
     setModal({ mode: 'add' });
   };
 
@@ -117,24 +173,86 @@ export function DatabaseTable({ database, onChange }: DatabaseTableProps) {
   const saveModal = () => {
     const name = propName.trim() || 'Untitled';
     if (modal?.mode === 'add') {
-      const prop: PropertyDef = {
-        id: newDbId('prop'),
-        name,
-        type: propType,
-        ...(propType === 'select'
-          ? {
-              options: propOptions
-                .split(',')
-                .map((o) => o.trim())
-                .filter(Boolean),
-            }
-          : {}),
-      };
-      onChange({
-        ...database,
-        properties: [...database.properties, prop],
-        updatedAt: Date.now(),
-      });
+      const propId = newDbId('prop');
+      if (propType === 'relation') {
+        const targetId = relationTargetId || database.id;
+        const forward: PropertyDef = {
+          id: propId,
+          name,
+          type: 'relation',
+          relationDatabaseId: targetId,
+        };
+        let next = databases.map((d) =>
+          d.id === database.id
+            ? { ...d, properties: [...d.properties, forward], updatedAt: Date.now() }
+            : d,
+        );
+        if (createReverse) {
+          const reverseId = newDbId('prop');
+          forward.relationPropertyId = reverseId;
+          const reverse: PropertyDef = {
+            id: reverseId,
+            name: database.title.trim() || 'Untitled database',
+            type: 'relation',
+            relationDatabaseId: database.id,
+            relationPropertyId: propId,
+          };
+          next = next.map((d) =>
+            d.id === targetId
+              ? {
+                  ...d,
+                  properties: [...d.properties, reverse],
+                  updatedAt: Date.now(),
+                }
+              : d,
+          );
+        }
+        onDatabasesChange(next);
+      } else if (propType === 'rollup') {
+        const relationProp = relationProps.find((p) => p.id === rollupRelationId);
+        if (!relationProp) {
+          // A rollup needs a relation to follow; keep the modal open.
+          return;
+        }
+        const target = relationTarget(relationProp, databases);
+        if (!target) {
+          // The relation's target database is gone; keep the modal open.
+          return;
+        }
+        const rollupProp: PropertyDef = {
+          id: propId,
+          name,
+          type: 'rollup',
+          rollupRelationId: relationProp.id,
+          rollupPropertyId:
+            rollupPropertyId || rollupTargetProps[0]?.id || '',
+          rollupFn,
+        };
+        onChange({
+          ...database,
+          properties: [...database.properties, rollupProp],
+          updatedAt: Date.now(),
+        });
+      } else {
+        const prop: PropertyDef = {
+          id: propId,
+          name,
+          type: propType,
+          ...(propType === 'select'
+            ? {
+                options: propOptions
+                  .split(',')
+                  .map((o) => o.trim())
+                  .filter(Boolean),
+              }
+            : {}),
+        };
+        onChange({
+          ...database,
+          properties: [...database.properties, prop],
+          updatedAt: Date.now(),
+        });
+      }
     } else if (modal?.mode === 'rename' && modal.property) {
       onChange({
         ...database,
@@ -198,6 +316,12 @@ export function DatabaseTable({ database, onChange }: DatabaseTableProps) {
       return null;
     });
   };
+
+  const rollupRelationProp = relationProps.find((p) => p.id === rollupRelationId);
+  const rollupTarget = rollupRelationProp
+    ? relationTarget(rollupRelationProp, databases)
+    : undefined;
+  const rollupTargetProps = rollupTarget ? aggregatableProps(rollupTarget) : [];
 
   return (
     <div className="folio-scroll overflow-x-auto pb-4">
@@ -300,6 +424,9 @@ export function DatabaseTable({ database, onChange }: DatabaseTableProps) {
                         <CellEditor
                           property={prop}
                           value={row.cells[prop.id]}
+                          database={database}
+                          databases={databases}
+                          row={row}
                           onCommit={(v) => setCell(row.id, prop.id, v)}
                           onCancel={() => setEditing(null)}
                         />
@@ -312,7 +439,13 @@ export function DatabaseTable({ database, onChange }: DatabaseTableProps) {
                         title={`Edit ${prop.name}`}
                         className="block w-full rounded-control px-2 py-1.5 text-left text-ink transition-colors duration-quick ease-folio hover:bg-paper-deep"
                       >
-                        <CellValueView property={prop} value={row.cells[prop.id]} />
+                        <CellValueView
+                          property={prop}
+                          value={row.cells[prop.id]}
+                          database={database}
+                          databases={databases}
+                          row={row}
+                        />
                       </button>
                     )}
                   </td>
@@ -392,13 +525,125 @@ export function DatabaseTable({ database, onChange }: DatabaseTableProps) {
                     aria-label="Select options"
                   />
                 )}
+                {propType === 'relation' && (
+                  <div className="flex flex-col gap-3">
+                    <label className="block">
+                      <span className="mb-1 block font-sans text-xs font-medium text-ink-faint">
+                        Related database
+                      </span>
+                      <select
+                        value={relationTargetId}
+                        onChange={(e) => setRelationTargetId(e.target.value)}
+                        aria-label="Related database"
+                        className="w-full rounded-control border border-hairline bg-paper px-3 py-2 font-sans text-sm text-ink outline-none focus-visible:border-accent"
+                      >
+                        {databases.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.icon} {d.title.trim() || 'Untitled database'}
+                            {d.id === database.id ? ' (this database)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="flex cursor-pointer items-start gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={createReverse}
+                        onChange={(e) => setCreateReverse(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
+                      />
+                      <span className="font-sans text-sm text-ink-soft">
+                        Also add the reverse relation on the target database
+                        <span className="block text-xs text-ink-faint">
+                          Two-way link — editing either side stays in sync
+                          conceptually; both columns read the same stored ids.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                )}
+                {propType === 'rollup' && (
+                  <div className="flex flex-col gap-3">
+                    {relationProps.length === 0 ? (
+                      <p className="rounded-control border border-hairline bg-paper-deep px-3 py-2.5 font-sans text-sm text-ink-faint">
+                        A rollup aggregates a relation. Add a relation column
+                        first, then come back.
+                      </p>
+                    ) : (
+                      <>
+                        <label className="block">
+                          <span className="mb-1 block font-sans text-xs font-medium text-ink-faint">
+                            Relation
+                          </span>
+                          <select
+                            value={rollupRelationId}
+                            onChange={(e) => {
+                              setRollupRelationId(e.target.value);
+                              setRollupPropertyId('');
+                            }}
+                            aria-label="Rollup relation"
+                            className="w-full rounded-control border border-hairline bg-paper px-3 py-2 font-sans text-sm text-ink outline-none focus-visible:border-accent"
+                          >
+                            {relationProps.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="block">
+                          <span className="mb-1 block font-sans text-xs font-medium text-ink-faint">
+                            Property to aggregate
+                          </span>
+                          <select
+                            value={rollupPropertyId || rollupTargetProps[0]?.id || ''}
+                            onChange={(e) => setRollupPropertyId(e.target.value)}
+                            aria-label="Rollup property"
+                            className="w-full rounded-control border border-hairline bg-paper px-3 py-2 font-sans text-sm text-ink outline-none focus-visible:border-accent"
+                          >
+                            {rollupTargetProps.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="block">
+                          <span className="mb-1 block font-sans text-xs font-medium text-ink-faint">
+                            Function
+                          </span>
+                          <select
+                            value={rollupFn}
+                            onChange={(e) => setRollupFn(e.target.value as RollupFn)}
+                            aria-label="Rollup function"
+                            className="w-full rounded-control border border-hairline bg-paper px-3 py-2 font-sans text-sm text-ink outline-none focus-visible:border-accent"
+                          >
+                            {ROLLUP_FNS.map(({ fn, label }) => (
+                              <option key={fn} value={fn}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </>
+                    )}
+                  </div>
+                )}
               </>
             )}
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setModal(null)}>
                 Cancel
               </Button>
-              <Button variant="primary" onClick={saveModal}>
+              <Button
+                variant="primary"
+                onClick={saveModal}
+                disabled={
+                  modal?.mode === 'add' &&
+                  propType === 'rollup' &&
+                  relationProps.length === 0
+                }
+              >
                 {modal?.mode === 'add' ? 'Add column' : 'Rename'}
               </Button>
             </div>
