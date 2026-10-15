@@ -2,6 +2,26 @@
 
 Issues found and fixed during the v1 completion sprint. Every entry records what broke, why, and the fix — so the same bug never ships twice.
 
+## 2026-10-15 — phase2: relations & rollups
+
+### Rollup `count` returned undefined without a target property
+- **Found:** Data-model smoke test failed — `computeRollup` returned `undefined` for a `count` rollup whose `rollupPropertyId` was unset.
+- **Why:** The early return `if (!relationProp || !property.rollupPropertyId) return undefined` ran before the `count` branch, but `count` counts linked rows and never reads the target property — so a perfectly valid count rollup rendered as "—".
+- **Fix:** Moved the `rollupPropertyId` requirement below the `count` branch; only `sum`/`avg`/`min`/`max` require it. The property-creation UI always sets a target property anyway, but hand-built or older configs now behave correctly.
+- **Status:** Fixed before commit. 16-assertion data-model test (resolve ordering, deleted-id dropping, all five functions, stale-config guards, self-relation) passes.
+
+### Design: no live back-reference syncing between two-way relation sides
+- **Found (design):** The two-way relation creates a reverse relation column on the target database, but the two sides are independent columns — adding a row id on side A does not write the reverse id into the target row's side-B cell.
+- **Why:** True synced back-references would require every relation write to also patch the target database (a second `onChange`), turning a single-cell edit into a cross-database transaction with conflict/undo complications.
+- **Fix:** Documented as the follow-up: reverse columns are a convenience for navigating/editing from the target side, not a synced mirror. Both columns read the same stored id arrays, so either side can be used to link rows; nothing crashes or desyncs because there is no invariant to break.
+- **Status:** Implemented as documented. Not a bug — recorded as the relation contract.
+
+### Design: rollup target properties exclude relation/rollup columns
+- **Found (design):** The rollup "property to aggregate" dropdown only lists text/number/select/date properties of the target database.
+- **Why:** Aggregating over another relation's id arrays is meaningless, and allowing rollup-over-rollup chains would permit dependency cycles with no evaluation-order story.
+- **Fix:** `aggregatableProps` filters both out in the creation UI; `computeRollup` additionally skips array values at read time, so even a hand-edited config degrades to "—" instead of NaN.
+- **Status:** Implemented.
+
 ## 2026-10-15 — phase2: file uploads
 
 ### Design: localStorage quota vs the 15MB refusal cap
