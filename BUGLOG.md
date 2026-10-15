@@ -133,3 +133,29 @@ Issues found and fixed during the v1 completion sprint. Every entry records what
 - **Why:** Snapshot identity is HTML text; without a dedupe check the list fills with byte-identical "auto-saves".
 - **Fix:** `capture()` returns null when the editor HTML equals the newest stored version's `contentHtml`; also skips empty/placeholder-only docs. Policy: snapshot after ≥30 updates AND ≥5 min since the last auto-save, plus a flush on page switch and a "First version" baseline for pages with no history.
 - **Status:** Implemented. Store capped at 50 versions per page (`folio-history-<pageId>`), oldest evicted.
+
+## 2026-10-15 — phase2: public page sharing
+
+### `getSchemaByResolvedExtensions` needs flattened extensions; ESM build omits `ExtensionManager`
+- **Found:** First draft of `renderFragmentHtml` called `getSchemaByResolvedExtensions([StarterKit.configure(...), ...])` and crashed with "Schema is missing its top node type ('doc')" — StarterKit's children (Document, Paragraph, …) were never flattened. Switching to `ExtensionManager.resolve()` then failed differently: `The requested module '@tiptap/core' does not provide an export named 'ExtensionManager'` — the ESM bundle's export list omits it even though the `.d.ts` declares it.
+- **Why:** The helper's name says "resolved" — it expects the already-flattened list the Editor builds internally; and tiptap's ESM/CJS export lists drift from their types.
+- **Fix:** Use `getSchema()` from `@tiptap/core`, which does `ExtensionManager.resolve()` + `getSchemaByResolvedExtensions()` internally and is properly exported from both bundles.
+- **Status:** Fixed before commit. Verified by rendering seed HTML to a string in a jsdom-backed test (headings, lists, toggles, images all serialize).
+
+### ProseMirror `DOMParser` has no `parseFromString`
+- **Found:** `tsc` error TS2339 — prosemirror-model's `DOMParser` exposes `parse(dom)`, not `parseFromString(string)`.
+- **Why:** Reached for the browser API name out of habit; ProseMirror parses DOM nodes.
+- **Fix:** Build a detached `<div>`, set `innerHTML`, and `DOMParser.fromSchema(schema).parse(container)`. Documented in the helper's comment.
+- **Status:** Fixed before commit. Typecheck clean.
+
+### Design: public links are same-device until the sync server exists
+- **Found (design):** Yjs docs are in-memory per session and share records are in localStorage — a `#/p/<id>` link opened in another browser finds no document and no share.
+- **Why:** Folio is local-first with no server; there is nowhere to resolve a public id remotely.
+- **Fix:** The share dialog and the URL scheme are built for the future server (`#/p/<publicId>`, unguessable token, never the page id), and the UI says so honestly: "Public links work on this device — a sync server enables true public sharing." Recorded as the sharing contract, same as the attachment quota entry.
+- **Status:** Implemented. Not a bug — recorded as the sharing contract.
+
+### Design: disabled shares keep their token
+- **Found (design):** Deleting the share record on unpublish would orphan the public id; re-publishing would mint a new link and break anyone holding the old one.
+- **Why:** "Publish to web" reads as a toggle, not a destructive action.
+- **Fix:** `disableSharing` sets `enabled: false` and keeps the token; `enableSharing` on an existing record reuses the public id. `getPageByPublicId` returns disabled records too, so the public route can distinguish "never existed" from "publishing turned off" with a specific message for each.
+- **Status:** Implemented. Covered by the store unit tests (disable → re-enable reuses token).
