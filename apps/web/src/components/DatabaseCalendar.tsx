@@ -83,6 +83,8 @@ function buildGrid(year: number, month: number): CalendarDay[] {
 
 export interface DatabaseCalendarProps {
   database: FolioDatabase;
+  /** Every database — relation and rollup cells resolve across this list. */
+  databases: FolioDatabase[];
   onChange: (db: FolioDatabase) => void;
 }
 
@@ -94,7 +96,7 @@ const MAX_CHIPS = 3;
  * "add item" action that pre-fills the date. Rows without a date land in the
  * unscheduled strip above the grid.
  */
-export function DatabaseCalendar({ database, onChange }: DatabaseCalendarProps) {
+export function DatabaseCalendar({ database, databases, onChange }: DatabaseCalendarProps) {
   const now = new Date();
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() });
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
@@ -391,6 +393,9 @@ export function DatabaseCalendar({ database, onChange }: DatabaseCalendarProps) 
                               key={p.id}
                               property={p}
                               value={row.cells[p.id]}
+                              database={database}
+                              databases={databases}
+                              row={row}
                             />
                           ))}
                         </div>
@@ -416,6 +421,7 @@ export function DatabaseCalendar({ database, onChange }: DatabaseCalendarProps) 
       {/* Row editor */}
       <DatabaseRowEditor
         database={database}
+        databases={databases}
         row={editingRow}
         onClose={() => setEditingRowId(null)}
         onChange={onChange}
