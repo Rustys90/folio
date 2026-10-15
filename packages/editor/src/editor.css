@@ -27,21 +27,40 @@
   line-height: 1.25;
   letter-spacing: -0.01em;
 }
-.folio-prosemirror h1 { font-size: 1.875rem; margin-top: 1.2em; }
-.folio-prosemirror h2 { font-size: 1.5rem; margin-top: 1.1em; }
-.folio-prosemirror h3 { font-size: 1.25rem; margin-top: 1em; }
+.folio-prosemirror h1 {
+  font-size: 1.875rem;
+  margin-top: 1.2em;
+}
+.folio-prosemirror h2 {
+  font-size: 1.5rem;
+  margin-top: 1.1em;
+}
+.folio-prosemirror h3 {
+  font-size: 1.25rem;
+  margin-top: 1em;
+}
 
-.folio-prosemirror p { margin: 0.35em 0; }
+.folio-prosemirror p {
+  margin: 0.35em 0;
+}
 
 .folio-prosemirror ul,
 .folio-prosemirror ol {
   padding-left: 1.5rem;
   margin: 0.35em 0;
 }
-.folio-prosemirror ul { list-style: disc; }
-.folio-prosemirror ol { list-style: decimal; }
-.folio-prosemirror li > p { margin: 0.15em 0; }
-.folio-prosemirror li::marker { color: var(--color-ink-faint); }
+.folio-prosemirror ul {
+  list-style: disc;
+}
+.folio-prosemirror ol {
+  list-style: decimal;
+}
+.folio-prosemirror li > p {
+  margin: 0.15em 0;
+}
+.folio-prosemirror li::marker {
+  color: var(--color-ink-faint);
+}
 
 .folio-prosemirror blockquote {
   border-left: 2px solid var(--color-accent);
@@ -126,6 +145,44 @@
   color: var(--color-ink-faint);
   pointer-events: none;
   height: 0;
+}
+
+/* Block-level comments — a subtle amber wash and gutter dot on commented blocks.
+   Painted by the FolioComments extension via node decorations. */
+.folio-prosemirror .folio-comment-anchor {
+  position: relative;
+  border-radius: var(--radius-control);
+  background: linear-gradient(
+    to right,
+    rgba(217, 119, 6, 0.1),
+    rgba(217, 119, 6, 0.02) 3rem,
+    transparent 4rem
+  );
+}
+.folio-prosemirror .folio-comment-anchor::before {
+  content: '';
+  position: absolute;
+  left: -0.9rem;
+  top: 0.65em;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 9999px;
+  background: rgba(217, 119, 6, 0.7);
+  pointer-events: none;
+}
+
+/* Flash when jumping to a comment's anchor block from the comments panel. */
+.folio-comment-flash {
+  animation: folio-comment-flash 1.5s ease-out;
+  border-radius: var(--radius-control);
+}
+@keyframes folio-comment-flash {
+  0% {
+    background-color: rgba(217, 119, 6, 0.3);
+  }
+  100% {
+    background-color: transparent;
+  }
 }
 
 /* Collaboration cursors */
