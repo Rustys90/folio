@@ -10,6 +10,7 @@ import {
   Pencil,
   Plus,
   Sigma,
+  SquareFunction,
   Trash2,
   Type,
   type LucideIcon,
@@ -40,11 +41,18 @@ import type {
 } from '../database-types';
 import {
   computeRollup,
+  isFormulaProperty,
   isRelationProperty,
   newDbId,
   relationTarget,
   ROLLUP_FNS,
 } from '../database-types';
+import {
+  computeFormula,
+  formatFormulaResult,
+  FORMULA_EXAMPLES,
+  FORMULA_FUNCTIONS,
+} from '../formula';
 import { CellEditor, CellValueView } from './database-cells';
 
 const TYPE_META: { type: PropertyType; label: string; icon: LucideIcon }[] = [
@@ -54,6 +62,7 @@ const TYPE_META: { type: PropertyType; label: string; icon: LucideIcon }[] = [
   { type: 'date', label: 'Date', icon: Calendar },
   { type: 'relation', label: 'Relation', icon: Link2 },
   { type: 'rollup', label: 'Rollup', icon: Sigma },
+  { type: 'formula', label: 'Formula', icon: SquareFunction },
 ];
 
 function typeIcon(type: PropertyType): LucideIcon {
@@ -97,7 +106,110 @@ export interface DatabaseTableProps {
 /** Non-computed properties of a database that a rollup can aggregate. */
 function aggregatableProps(db: FolioDatabase): PropertyDef[] {
   return db.properties.filter(
-    (p) => p.type !== 'relation' && p.type !== 'rollup',
+    (p) => p.type !== 'relation' && p.type !== 'rollup' && p.type !== 'formula',
+  );
+}
+
+/**
+ * Expression editor for formula columns: textarea, one-click examples,
+ * function reference, and a live preview evaluated against the first row.
+ */
+function FormulaEditor({
+  expression,
+  onChange,
+  database,
+  databases,
+}: {
+  expression: string;
+  onChange: (expression: string) => void;
+  database: FolioDatabase;
+  databases: FolioDatabase[];
+}) {
+  const previewProp: PropertyDef = {
+    id: 'formula-preview',
+    name: 'Formula',
+    type: 'formula',
+    formulaExpression: expression.trim(),
+  };
+  const previewRow = database.rows[0];
+  const preview = previewRow
+    ? computeFormula(previewProp, database, previewRow, databases)
+    : null;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <label className="block">
+        <span className="mb-1 block font-sans text-xs font-medium text-ink-faint">
+          Expression
+        </span>
+        <textarea
+          value={expression}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder='e.g. prop("Price") * prop("Qty")'
+          aria-label="Formula expression"
+          rows={3}
+          spellCheck={false}
+          className="folio-scroll w-full rounded-control border border-hairline bg-paper px-3 py-2 font-mono text-sm text-ink outline-none focus-visible:border-accent"
+        />
+      </label>
+      <div className="flex flex-wrap gap-1.5">
+        {FORMULA_EXAMPLES.map((example) => (
+          <button
+            key={example}
+            type="button"
+            onClick={() => onChange(example)}
+            title={`Use ${example}`}
+            className="rounded-full border border-hairline px-2.5 py-1 font-mono text-xs text-ink-soft transition-colors hover:border-accent/40 hover:text-ink"
+          >
+            {example}
+          </button>
+        ))}
+      </div>
+      <div
+        className={cn(
+          'rounded-control border px-3 py-2 font-sans text-sm',
+          preview && preview.error
+            ? 'border-red-500/40 bg-red-500/5 text-red-600 dark:text-red-400'
+            : 'border-hairline bg-paper-deep text-ink',
+        )}
+        aria-live="polite"
+      >
+        <span className="mr-2 font-serif italic text-ink-faint" aria-hidden>
+          ƒ
+        </span>
+        {preview === null ? (
+          <span className="text-xs text-ink-faint">
+            Add a row to preview the result.
+          </span>
+        ) : preview.error ? (
+          <span className="text-xs">{preview.error}</span>
+        ) : (
+          <span className="tabular-nums">{formatFormulaResult(preview)}</span>
+        )}
+      </div>
+      <details className="group/details">
+        <summary className="cursor-pointer font-sans text-xs font-medium text-ink-faint transition-colors hover:text-ink">
+          Function reference
+        </summary>
+        <dl className="mt-2 grid grid-cols-1 gap-1.5">
+          {FORMULA_FUNCTIONS.map(({ signature, description }) => (
+            <div
+              key={signature}
+              className="flex flex-col gap-0.5 rounded-control bg-paper-deep px-2.5 py-1.5"
+            >
+              <dt className="font-mono text-xs text-ink">{signature}</dt>
+              <dd className="font-sans text-xs text-ink-faint">{description}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="mt-2 font-sans text-xs text-ink-faint">
+          Operators: <span className="font-mono">+ - * / %</span>, comparisons{' '}
+          <span className="font-mono">== != &gt; &lt; &gt;= &lt;=</span>, and{' '}
+          <span className="font-mono">and or not</span>. <span className="font-mono">+</span>{' '}
+          concatenates when either side is text.
+        </p>
+      </details>
+    </div>
   );
 }
 
@@ -126,6 +238,7 @@ export function DatabaseTable({
   const [rollupRelationId, setRollupRelationId] = useState('');
   const [rollupPropertyId, setRollupPropertyId] = useState('');
   const [rollupFn, setRollupFn] = useState<RollupFn>('count');
+  const [formulaExpression, setFormulaExpression] = useState('');
 
   const relationProps = database.properties.filter(isRelationProperty);
 
@@ -142,6 +255,22 @@ export function DatabaseTable({
         if (va === undefined) return 1;
         if (vb === undefined) return -1;
         return (va - vb) * dir;
+      }
+      if (isFormulaProperty(prop)) {
+        const raRes = computeFormula(prop, database, ra, databases);
+        const rbRes = computeFormula(prop, database, rb, databases);
+        const va = raRes.error ? undefined : raRes.value;
+        const vb = rbRes.error ? undefined : rbRes.value;
+        if (va === undefined && vb === undefined) return 0;
+        if (va === undefined) return 1;
+        if (vb === undefined) return -1;
+        if (typeof va === 'number' && typeof vb === 'number') {
+          return (va - vb) * dir;
+        }
+        return (
+          String(va).localeCompare(String(vb), undefined, { numeric: true }) *
+          dir
+        );
       }
       return compareCells(ra.cells[prop.id], rb.cells[prop.id], prop.type) * dir;
     });
@@ -160,6 +289,7 @@ export function DatabaseTable({
     setRollupRelationId(firstRelation?.id ?? '');
     setRollupPropertyId('');
     setRollupFn('count');
+    setFormulaExpression('');
     setModal({ mode: 'add' });
   };
 
@@ -167,6 +297,7 @@ export function DatabaseTable({
     setPropName(property.name);
     setPropType(property.type);
     setPropOptions((property.options ?? []).join(', '));
+    setFormulaExpression(property.formulaExpression ?? '');
     setModal({ mode: 'rename', property });
   };
 
@@ -233,6 +364,18 @@ export function DatabaseTable({
           properties: [...database.properties, rollupProp],
           updatedAt: Date.now(),
         });
+      } else if (propType === 'formula') {
+        const formulaProp: PropertyDef = {
+          id: propId,
+          name,
+          type: 'formula',
+          formulaExpression: formulaExpression.trim(),
+        };
+        onChange({
+          ...database,
+          properties: [...database.properties, formulaProp],
+          updatedAt: Date.now(),
+        });
       } else {
         const prop: PropertyDef = {
           id: propId,
@@ -257,7 +400,15 @@ export function DatabaseTable({
       onChange({
         ...database,
         properties: database.properties.map((p) =>
-          p.id === modal.property!.id ? { ...p, name } : p,
+          p.id === modal.property!.id
+            ? {
+                ...p,
+                name,
+                ...(isFormulaProperty(p)
+                  ? { formulaExpression: formulaExpression.trim() }
+                  : {}),
+              }
+            : p,
         ),
         updatedAt: Date.now(),
       });
@@ -479,7 +630,9 @@ export function DatabaseTable({
           <ModalDescription>
             {modal?.mode === 'add'
               ? 'Name the column and pick a property type.'
-              : 'Give the column a new name.'}
+              : modal?.property && isFormulaProperty(modal.property)
+                ? 'Give the column a new name, or edit its expression.'
+                : 'Give the column a new name.'}
           </ModalDescription>
           <div className="mt-5 flex flex-col gap-4">
             <Input
@@ -629,8 +782,26 @@ export function DatabaseTable({
                     )}
                   </div>
                 )}
+                {propType === 'formula' && (
+                  <FormulaEditor
+                    expression={formulaExpression}
+                    onChange={setFormulaExpression}
+                    database={database}
+                    databases={databases}
+                  />
+                )}
               </>
             )}
+            {modal?.mode === 'rename' &&
+              modal.property &&
+              isFormulaProperty(modal.property) && (
+                <FormulaEditor
+                  expression={formulaExpression}
+                  onChange={setFormulaExpression}
+                  database={database}
+                  databases={databases}
+                />
+              )}
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setModal(null)}>
                 Cancel
