@@ -193,3 +193,16 @@ Issues found and fixed during the v1 completion sprint. Every entry records what
 - **Why:** "Publish to web" reads as a toggle, not a destructive action.
 - **Fix:** `disableSharing` sets `enabled: false` and keeps the token; `enableSharing` on an existing record reuses the public id. `getPageByPublicId` returns disabled records too, so the public route can distinguish "never existed" from "publishing turned off" with a specific message for each.
 - **Status:** Implemented. Covered by the store unit tests (disable → re-enable reuses token).
+
+## 2026-10-15 — phase2: timeline view
+
+### End-before-start rows clamped instead of rendering negative-width bars
+- **Found (defensive):** During the timeline build — a row whose end date cell is earlier than its start date would produce a negative bar width (`diffDays(start, end) + 1 < 0`), which CSS clamps to zero and leaves an invisible, undraggable artifact at a misleading position.
+- **Why:** Date cells are free-form; nothing in the table view prevents end < start, and imports can bring it in.
+- **Fix:** `DatabaseTimeline` treats an end date earlier than the start as unset (one-day milestone at the start date) when resolving bar dates, mirroring how a missing end renders. The stored cells are untouched — a later data fix in the table view restores the intended bar.
+- **Status:** Implemented. `typecheck`, `eslint`, and the web build pass; dev smoke test returned HTTP 200.
+
+### Drag handles stop propagation so edge-resize never also starts a move
+- **Found (design):** The resize handles are children of the draggable bar element, whose own `pointerdown` starts a move-drag. Without `stopPropagation` on the handle's `pointerdown`, grabbing an edge would register both a `start`/`end` drag and (via bubbling) a `move` drag, fighting over the preview state.
+- **Fix:** Handle `onPointerDown` calls `e.stopPropagation()` before `beginDrag`; pointer capture is set on the handle, and move/up events bubble to the bar's handlers, so a single drag session still drives the whole interaction.
+- **Status:** Implemented as designed.
