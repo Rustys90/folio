@@ -106,3 +106,32 @@ body {
 ::selection {
   background: var(--color-accent-soft);
 }
+
+/* Content skeleton shimmer */
+.folio-shimmer {
+  border-radius: var(--radius-control);
+  background: linear-gradient(
+    100deg,
+    var(--color-paper-deep) 30%,
+    var(--color-accent-soft) 50%,
+    var(--color-paper-deep) 70%
+  );
+  background-size: 200% 100%;
+  animation: folio-shimmer 1.2s var(--ease-folio) infinite;
+}
+
+@keyframes folio-shimmer {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -20% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .folio-shimmer {
+    animation: none;
+    background: var(--color-paper-deep);
+  }
+}
