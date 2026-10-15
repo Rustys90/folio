@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Search, Plus, ChevronRight, FileText, Table2 } from 'lucide-react';
+import { Search, Plus, ChevronRight, FileText, Table2, Upload } from 'lucide-react';
+import type { TemplateKind } from './TemplatePicker';
 import type { FolioPage } from '../types';
 import type { FolioDatabase } from '../database-types';
 import { cn } from '@folio/ui/cn';
@@ -12,7 +13,10 @@ export interface SidebarProps {
   databases: FolioDatabase[];
   selectedDbId: string | null;
   onSelectDatabase: (id: string) => void;
-  onNewDatabase: () => void;
+  /** Open the template gallery for pages or databases. */
+  onTemplatePicker: (kind: TemplateKind) => void;
+  /** Open the import dialog. */
+  onImport: () => void;
 }
 
 interface TreeNode extends FolioPage {
@@ -124,7 +128,8 @@ export function Sidebar({
   databases,
   selectedDbId,
   onSelectDatabase,
-  onNewDatabase,
+  onTemplatePicker,
+  onImport,
 }: SidebarProps) {
   const [query, setQuery] = useState('');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(
@@ -210,14 +215,21 @@ export function Sidebar({
         )}
       </nav>
 
-      {/* New page */}
+      {/* New page + import */}
       <div className="border-t border-hairline p-2">
         <button
-          onClick={() => onNewPage(null)}
+          onClick={() => onTemplatePicker('page')}
           className="folio-row flex w-full items-center gap-2 rounded-control px-2.5 py-2 text-sm text-ink-soft"
         >
           <Plus className="h-4 w-4" aria-hidden />
           New page
+        </button>
+        <button
+          onClick={onImport}
+          className="folio-row flex w-full items-center gap-2 rounded-control px-2.5 py-2 text-sm text-ink-soft"
+        >
+          <Upload className="h-4 w-4" aria-hidden />
+          Import
         </button>
       </div>
 
@@ -228,7 +240,7 @@ export function Sidebar({
             Databases
           </span>
           <button
-            onClick={onNewDatabase}
+            onClick={() => onTemplatePicker('database')}
             aria-label="New database"
             title="New database"
             className="flex h-6 w-6 items-center justify-center rounded-control text-ink-faint transition-colors duration-quick hover:bg-accent-soft hover:text-ink"
@@ -268,7 +280,7 @@ export function Sidebar({
           </div>
         )}
         <button
-          onClick={onNewDatabase}
+          onClick={() => onTemplatePicker('database')}
           className="folio-row mt-1 flex w-full items-center gap-2 rounded-control px-2.5 py-2 text-sm text-ink-soft"
         >
           <Plus className="h-4 w-4" aria-hidden />
