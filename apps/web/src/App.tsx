@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Doc as YDoc } from 'yjs';
 import type { WebsocketProvider } from 'y-websocket';
+import type { Editor } from '@tiptap/core';
 import { FolioEditor } from '@folio/editor/editor';
 import { createFolioDoc } from '@folio/sync/doc';
 import { createSyncProvider, type FolioSyncProvider } from '@folio/sync/provider';
@@ -14,6 +15,7 @@ import { DatabaseKanban } from './components/DatabaseKanban';
 import { DatabaseCalendar } from './components/DatabaseCalendar';
 import { DatabaseGallery } from './components/DatabaseGallery';
 import { CommandPalette } from './components/CommandPalette';
+import { CommentsPanel } from './components/Comments';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ContentSkeleton } from './components/ContentSkeleton';
 import { TemplatePicker, type TemplateKind } from './components/TemplatePicker';
@@ -28,6 +30,15 @@ import {
 import type { FolioPage, FolioIdentity } from './types';
 import type { DatabaseView, FolioDatabase } from './database-types';
 import { newDbId } from './database-types';
+import {
+  localCommentStore,
+  newCommentId,
+  authorFromIdentity,
+  unresolvedCount,
+  type CommentAnchor,
+  type CommentDraft,
+  type CommentThread,
+} from './comments';
 
 const SYNC_URL =
   typeof import.meta !== 'undefined'
@@ -36,6 +47,62 @@ const SYNC_URL =
 
 const CURSOR_COLORS = ['#2e5bff', '#e11d48', '#059669', '#d97706', '#7c3aed', '#0891b2'];
 const DATABASES_KEY = 'folio-databases';
+
+const collapseWhitespace = (s: string) => s.replace(/\s+/g, ' ').trim();
+
+/** 0-based index of the top-level block containing the selection head. */
+function blockIndexAtSelection(editor: Editor): number {
+  const { selection, doc } = editor.state;
+  let index = 0;
+  let matched = false;
+  doc.content.forEach((node, offset, i) => {
+    if (
+      !matched &&
+      selection.$from.pos >= offset &&
+      selection.$from.pos <= offset + node.nodeSize
+    ) {
+      index = i;
+      matched = true;
+    }
+  });
+  return index;
+}
+
+/**
+ * The quote stored on a comment anchor: the selected text when there is a
+ * selection, otherwise an excerpt of the block under the cursor.
+ */
+function quoteFromSelection(editor: Editor, blockIndex: number): string {
+  const { state } = editor;
+  const { selection } = state;
+  if (!selection.empty) {
+    return collapseWhitespace(state.doc.textBetween(selection.from, selection.to, ' ')).slice(
+      0,
+      200,
+    );
+  }
+  return collapseWhitespace(state.doc.child(blockIndex).textContent).slice(0, 140);
+}
+
+/**
+ * Re-resolve an anchor to a live block index. Prefers the block whose text
+ * still contains the stored quote (survives inserts/deletes above it); falls
+ * back to the creation-time index, clamped into range.
+ */
+function resolveAnchorIndex(editor: Editor, anchor: CommentAnchor): number {
+  const { doc } = editor.state;
+  const count = doc.childCount;
+  if (count === 0) return 0;
+  const needle = anchor.quote.trim().toLowerCase();
+  if (needle) {
+    let match = -1;
+    doc.content.forEach((node, _offset, i) => {
+      if (match === -1 && node.textContent.toLowerCase().includes(needle)) match = i;
+    });
+    if (match !== -1) return match;
+  }
+  return Math.min(Math.max(anchor.blockIndex, 0), count - 1);
+}
 
 function loadIdentity(): FolioIdentity {
   try {
@@ -105,6 +172,11 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [templatePicker, setTemplatePicker] = useState<TemplateKind | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  // Block-level comments for the open page.
+  const [threads, setThreads] = useState<CommentThread[]>([]);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [commentDraft, setCommentDraft] = useState<CommentDraft | null>(null);
+  const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
   // initialHtml for pages created from a template or an import, keyed by page id.
   // FolioEditor writes it into the Yjs doc on first open (same as seed content).
   const initialHtmlRef = useRef(new Map<string, string>());
@@ -168,6 +240,18 @@ export function App() {
     }
   }, [databases]);
 
+  // Load this page's comment threads; drop any draft when the page changes.
+  useEffect(() => {
+    setCommentDraft(null);
+    setThreads(selectedId ? localCommentStore.list(selectedId) : []);
+  }, [selectedId]);
+
+  // Persist comment threads per page.
+  useEffect(() => {
+    if (!selectedId) return;
+    localCommentStore.save(selectedId, threads);
+  }, [threads, selectedId]);
+
   // Deep-link the open page or database
   useEffect(() => {
     window.location.hash = selectedDbId
@@ -179,6 +263,16 @@ export function App() {
 
   const selectedPage = selectedDbId ? null : (pages.find((p) => p.id === selectedId) ?? null);
   const selectedDb = databases.find((d) => d.id === selectedDbId) ?? null;
+
+  // Paint comment markers on blocks carrying unresolved threads.
+  useEffect(() => {
+    if (!activeEditor || !selectedPage) return;
+    const indices = new Set<number>();
+    for (const thread of threads) {
+      if (!thread.resolved) indices.add(resolveAnchorIndex(activeEditor, thread.anchor));
+    }
+    activeEditor.commands.setCommentedBlocks([...indices]);
+  }, [threads, activeEditor, selectedPage]);
 
   const selectPage = useCallback((id: string) => {
     setSelectedId(id);
@@ -217,12 +311,6 @@ export function App() {
   const togglePalette = useCallback(() => setPaletteOpen((open) => !open), []);
   const toggleDark = useCallback(() => setDark((d) => !d), []);
   const newTopLevelPage = useCallback(() => handleNewPage(null), [handleNewPage]);
-  useShortcuts({
-    onCommandPalette: togglePalette,
-    onNewPage: newTopLevelPage,
-    onToggleDark: toggleDark,
-  });
-
   // Brief shimmer on page/database switch to smooth the editor transition.
   useEffect(() => {
     if (firstRenderRef.current) {
@@ -315,8 +403,7 @@ export function App() {
           const next: FolioDatabase = { ...d, view };
           // First time the calendar is selected, drive it by the first date property.
           if (view === 'calendar' && (next.calendarDateProp ?? null) === null) {
-            next.calendarDateProp =
-              d.properties.find((p) => p.type === 'date')?.id ?? null;
+            next.calendarDateProp = d.properties.find((p) => p.type === 'date')?.id ?? null;
           }
           return next;
         }),
@@ -337,6 +424,95 @@ export function App() {
     }
   }, [selectedId]);
 
+  /** Capture the current block/selection as a comment anchor and open the composer. */
+  const handleAddComment = useCallback(() => {
+    if (!selectedPage || !activeEditor) return;
+    const blockIndex = blockIndexAtSelection(activeEditor);
+    setCommentDraft({ blockIndex, quote: quoteFromSelection(activeEditor, blockIndex) });
+    setCommentsOpen(true);
+  }, [selectedPage, activeEditor]);
+
+  const handleCreateThread = useCallback(
+    (text: string) => {
+      if (!selectedPage || !commentDraft) return;
+      const thread: CommentThread = {
+        id: newCommentId(),
+        pageId: selectedPage.id,
+        anchor: { ...commentDraft },
+        author: authorFromIdentity(identity),
+        text,
+        createdAt: Date.now(),
+        resolved: false,
+        replies: [],
+      };
+      setThreads((prev) => [thread, ...prev]);
+      setCommentDraft(null);
+    },
+    [selectedPage, commentDraft, identity],
+  );
+
+  const handleAddReply = useCallback(
+    (threadId: string, text: string) => {
+      setThreads((prev) =>
+        prev.map((thread) =>
+          thread.id === threadId
+            ? {
+                ...thread,
+                replies: [
+                  ...thread.replies,
+                  {
+                    id: newCommentId(),
+                    author: authorFromIdentity(identity),
+                    text,
+                    createdAt: Date.now(),
+                  },
+                ],
+              }
+            : thread,
+        ),
+      );
+    },
+    [identity],
+  );
+
+  const handleToggleResolve = useCallback((threadId: string) => {
+    setThreads((prev) =>
+      prev.map((thread) =>
+        thread.id === threadId ? { ...thread, resolved: !thread.resolved } : thread,
+      ),
+    );
+  }, []);
+
+  const handleDeleteThread = useCallback((threadId: string) => {
+    setThreads((prev) => prev.filter((thread) => thread.id !== threadId));
+  }, []);
+
+  /** Scroll the editor to a thread's anchored block and flash it. */
+  const handleFocusThread = useCallback(
+    (thread: CommentThread) => {
+      if (!activeEditor) return;
+      const index = resolveAnchorIndex(activeEditor, thread.anchor);
+      let pos = 0;
+      activeEditor.state.doc.content.forEach((_node, offset, i) => {
+        if (i === index) pos = offset;
+      });
+      const dom = activeEditor.view.nodeDOM(pos);
+      if (!(dom instanceof HTMLElement)) return;
+      dom.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      dom.classList.add('folio-comment-flash');
+      window.setTimeout(() => dom.classList.remove('folio-comment-flash'), 1600);
+      activeEditor.commands.focus();
+    },
+    [activeEditor],
+  );
+
+  useShortcuts({
+    onCommandPalette: togglePalette,
+    onNewPage: newTopLevelPage,
+    onToggleDark: toggleDark,
+    onAddComment: handleAddComment,
+  });
+
   return (
     <div className="flex h-full bg-paper text-ink">
       <Sidebar
@@ -351,69 +527,93 @@ export function App() {
         onImport={() => setImportOpen(true)}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar
-          doc={selectedDb ?? selectedPage}
-          onTitleChange={selectedDb ? handleDatabaseTitleChange : handleRename}
-          databaseView={selectedDb ? selectedDb.view : null}
-          onViewChange={handleViewChange}
-          dark={dark}
-          onToggleDark={() => setDark((d) => !d)}
-          syncConnected={syncConnected}
-          onShare={() => setShareOpen(true)}
-          canShare={selectedPage !== null}
-        />
+      <div className="flex min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TopBar
+            doc={selectedDb ?? selectedPage}
+            onTitleChange={selectedDb ? handleDatabaseTitleChange : handleRename}
+            databaseView={selectedDb ? selectedDb.view : null}
+            onViewChange={handleViewChange}
+            dark={dark}
+            onToggleDark={() => setDark((d) => !d)}
+            syncConnected={syncConnected}
+            onShare={() => setShareOpen(true)}
+            canShare={selectedPage !== null}
+            commentCount={unresolvedCount(threads)}
+            commentsOpen={commentsOpen}
+            onToggleComments={() => setCommentsOpen((open) => !open)}
+            onAddComment={handleAddComment}
+            showComments={selectedPage !== null}
+          />
 
-        <main className="folio-scroll folio-enter-content min-h-0 flex-1 overflow-y-auto">
-          <ErrorBoundary>
-            {switching ? (
-              <ContentSkeleton />
-            ) : selectedDb ? (
-              <div className="mx-auto w-full max-w-5xl px-8 pb-32 pt-8">
-                {selectedDb.view === 'table' ? (
-                  <DatabaseTable
-                    key={selectedDb.id}
-                    database={selectedDb}
-                    onChange={handleDatabaseChange}
+          <main className="folio-scroll folio-enter-content min-h-0 flex-1 overflow-y-auto">
+            <ErrorBoundary>
+              {switching ? (
+                <ContentSkeleton />
+              ) : selectedDb ? (
+                <div className="mx-auto w-full max-w-5xl px-8 pb-32 pt-8">
+                  {selectedDb.view === 'table' ? (
+                    <DatabaseTable
+                      key={selectedDb.id}
+                      database={selectedDb}
+                      onChange={handleDatabaseChange}
+                    />
+                  ) : selectedDb.view === 'kanban' ? (
+                    <DatabaseKanban
+                      key={selectedDb.id}
+                      database={selectedDb}
+                      onChange={handleDatabaseChange}
+                    />
+                  ) : selectedDb.view === 'calendar' ? (
+                    <DatabaseCalendar
+                      key={selectedDb.id}
+                      database={selectedDb}
+                      onChange={handleDatabaseChange}
+                    />
+                  ) : (
+                    <DatabaseGallery
+                      key={selectedDb.id}
+                      database={selectedDb}
+                      onChange={handleDatabaseChange}
+                    />
+                  )}
+                </div>
+              ) : selectedPage ? (
+                <div className="mx-auto w-full max-w-3xl px-8 pb-32 pt-10 md:px-12">
+                  <FolioEditor
+                    key={selectedPage.id}
+                    ydoc={getDoc(selectedPage.id)}
+                    provider={provider}
+                    user={identity}
+                    onEditorChange={setActiveEditor}
+                    initialHtml={
+                      seedContent[selectedPage.id] ?? initialHtmlRef.current.get(selectedPage.id)
+                    }
                   />
-                ) : selectedDb.view === 'kanban' ? (
-                  <DatabaseKanban
-                    key={selectedDb.id}
-                    database={selectedDb}
-                    onChange={handleDatabaseChange}
-                  />
-                ) : selectedDb.view === 'calendar' ? (
-                  <DatabaseCalendar
-                    key={selectedDb.id}
-                    database={selectedDb}
-                    onChange={handleDatabaseChange}
-                  />
-                ) : (
-                  <DatabaseGallery
-                    key={selectedDb.id}
-                    database={selectedDb}
-                    onChange={handleDatabaseChange}
-                  />
-                )}
-              </div>
-            ) : selectedPage ? (
-              <div className="mx-auto w-full max-w-3xl px-8 pb-32 pt-10 md:px-12">
-                <FolioEditor
-                  key={selectedPage.id}
-                  ydoc={getDoc(selectedPage.id)}
-                  provider={provider}
-                  user={identity}
-                  initialHtml={
-                    seedContent[selectedPage.id] ??
-                    initialHtmlRef.current.get(selectedPage.id)
-                  }
-                />
-              </div>
-            ) : (
-              <EmptyState onNewPage={() => handleNewPage(null)} />
-            )}
-          </ErrorBoundary>
-        </main>
+                </div>
+              ) : (
+                <EmptyState onNewPage={() => handleNewPage(null)} />
+              )}
+            </ErrorBoundary>
+          </main>
+        </div>
+
+        {selectedPage && (
+          <CommentsPanel
+            open={commentsOpen}
+            pageId={selectedPage.id}
+            identity={identity}
+            threads={threads}
+            draft={commentDraft}
+            onCancelDraft={() => setCommentDraft(null)}
+            onCreateThread={handleCreateThread}
+            onAddReply={handleAddReply}
+            onToggleResolve={handleToggleResolve}
+            onDeleteThread={handleDeleteThread}
+            onFocusThread={handleFocusThread}
+            onClose={() => setCommentsOpen(false)}
+          />
+        )}
       </div>
 
       {/* Command palette */}
