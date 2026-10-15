@@ -111,6 +111,7 @@ all welcome — start with [CONTRIBUTING.md](CONTRIBUTING.md) and the
 - [x] Page **version history** with auto-snapshots, manual saves, preview, and one-click restore
 - [x] **File uploads** — per-page attachments with drag-and-drop, image previews, and image blocks in the editor
 - [x] **Public page sharing** — publish pages to the web with unguessable links (`#/p/<id>`), read-only view
+- [x] Database **relations & rollups** — link rows across databases (with two-way back-references) and aggregate them with count/sum/average/min/max
 - [ ] **Mobile** apps
 - [ ] **AI-assisted** writing features
 
