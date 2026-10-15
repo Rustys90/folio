@@ -54,6 +54,8 @@ export const seedDatabases: FolioDatabase[] = [
     view: 'table',
     kanbanGroupBy: 'prop-status',
     calendarDateProp: 'prop-due',
+    timelineStartProp: 'prop-due',
+    timelineEndProp: null,
     updatedAt: Date.now(),
     properties: [
       { id: 'prop-task', name: 'Task', type: 'text' },
