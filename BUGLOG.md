@@ -2,6 +2,32 @@
 
 Issues found and fixed during the v1 completion sprint. Every entry records what broke, why, and the fix — so the same bug never ships twice.
 
+## 2026-10-15 — phase2: file uploads
+
+### Design: localStorage quota vs the 15MB refusal cap
+- **Found (design):** Browsers cap localStorage at ~5MB per origin, so the spec'd "refuse over 15MB" cap is unreachable in practice — files between ~5MB and 15MB fail with a quota error instead of the size guard.
+- **Why:** The brief mandates localStorage + data URLs; the quota is a browser constant, not something the store controls.
+- **Fix:** `localAttachmentStore.save` catches the quota error and throws `AttachmentQuotaExceededError` with a plain-language message, rolled back cleanly (nothing is half-written); the UI surfaces it in the panel notice. Documented as the seam for the future S3 backend, which removes the constraint entirely.
+- **Status:** Implemented. Not a bug — recorded as the storage contract.
+
+### Design: image blocks store attachment ids, not bytes
+- **Found (design):** Storing a data URL on the image node would duplicate megabytes of file bytes into the Yjs document (and every version-history snapshot).
+- **Why:** TipTap image nodes conventionally carry `src` inline; here the bytes already live in the AttachmentStore.
+- **Fix:** The clean-room `folioImage` node stores only `attachmentId` + `alt`; it resolves `src` through the host's `resolveAttachmentUrl` option — in the node view while editing, and at `renderHTML` time so `getHTML()` snapshots (version history, export) still show the image. Deleting an attachment renders the block as a quiet placeholder, never a broken image.
+- **Status:** Implemented. typecheck + eslint clean, present in the production bundle.
+
+### API deviation: `save(pageId, file)` instead of `save(file)`
+- **Found (design):** The brief sketched `AttachmentStore.save(file)`, but the store cannot scope or list per page without the page id.
+- **Why:** `list(pageId)` and `remove(id)` already carry the page scope; the store instance is not per-page.
+- **Fix:** Interface is `save(pageId, file)`; the deviation is documented on the interface so a server implementation takes `pageId` the same way (bucket prefix / row column).
+- **Status:** Implemented.
+
+### Unused `event` param in the drop-zone drag-leave handler
+- **Found:** `tsc` error TS6133 — the first draft of `handleDragLeave` declared `(event: DragEvent)` but never read it.
+- **Why:** The counter-based enter/leave tracking doesn't need the event object.
+- **Fix:** Dropped the parameter.
+- **Status:** Fixed before commit. Typecheck clean.
+
 ## 2026-10-15 — phase2: templates + import tools
 
 ### Markdown import: nested list items rendered in reverse order
