@@ -15,6 +15,8 @@ function dbWith(props: PropertyDef[], rows: DatabaseRow[]): FolioDatabase {
     view: 'table',
     kanbanGroupBy: null,
     calendarDateProp: null,
+    timelineStartProp: null,
+    timelineEndProp: null,
     updatedAt: 0,
   };
 }
