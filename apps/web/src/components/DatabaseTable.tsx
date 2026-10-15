@@ -171,6 +171,8 @@ export function DatabaseTable({ database, onChange }: DatabaseTableProps) {
       }),
       kanbanGroupBy:
         database.kanbanGroupBy === propertyId ? null : database.kanbanGroupBy,
+      calendarDateProp:
+        database.calendarDateProp === propertyId ? null : database.calendarDateProp,
       updatedAt: Date.now(),
     });
     setSort((s) => (s?.propertyId === propertyId ? null : s));
