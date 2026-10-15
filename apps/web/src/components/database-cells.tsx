@@ -11,11 +11,17 @@ import type {
 } from '../database-types';
 import {
   computeRollup,
+  isFormulaProperty,
   relationIds,
   relationTarget,
   resolveRelation,
   titleProperty,
 } from '../database-types';
+import {
+  computeFormula,
+  formatFormulaResult,
+  type FormulaValue as FormulaEvalValue,
+} from '../formula';
 
 /**
  * Shared cell rendering and editing for database views.
@@ -108,8 +114,8 @@ function RelationChips({
   );
 }
 
-/** Format a rollup number: integers plain, averages trimmed to 2 decimals. */
-function formatRollup(value: number): string {
+/** Format a computed number: integers plain, fractions trimmed to 2 decimals. */
+function formatComputedNumber(value: number): string {
   if (Number.isInteger(value)) return String(value);
   return value
     .toFixed(2)
@@ -139,11 +145,72 @@ function RollupValue({
     return <span className={cn('text-ink-faint', className)}>—</span>;
   }
   return (
-    <span className={cn('tabular-nums', className)}>{formatRollup(value)}</span>
+    <span className={cn('tabular-nums', className)}>{formatComputedNumber(value)}</span>
   );
 }
 
-/** Read-only cell rendering: pills for selects, chips for relations, computed rollups, text otherwise. */
+/** Read-only formula rendering: recomputed on every render, with a subtle ƒ indicator. */
+function FormulaValue({
+  property,
+  database,
+  row,
+  databases,
+  className,
+}: {
+  property: PropertyDef;
+  database: FolioDatabase | undefined;
+  row: DatabaseRow | undefined;
+  databases: FolioDatabase[] | undefined;
+  className?: string;
+}) {
+  const result =
+    database && row
+      ? computeFormula(property, database, row, databases ?? [])
+      : { value: undefined as FormulaEvalValue };
+  if (result.error) {
+    return (
+      <span
+        className={cn('inline-flex items-center gap-1.5', className)}
+        title={result.error}
+      >
+        <span className="font-serif italic text-ink-faint" aria-hidden>
+          ƒ
+        </span>
+        <span className="truncate font-sans text-xs text-red-600 dark:text-red-400">
+          {result.error}
+        </span>
+      </span>
+    );
+  }
+  const text = formatFormulaResult(result);
+  if (text === '—') {
+    return (
+      <span className={cn('inline-flex items-center gap-1.5', className)}>
+        <span className="font-serif italic text-ink-faint" aria-hidden>
+          ƒ
+        </span>
+        <span className="text-ink-faint">—</span>
+      </span>
+    );
+  }
+  return (
+    <span className={cn('inline-flex min-w-0 items-center gap-1.5', className)}>
+      <span className="font-serif italic text-ink-faint" aria-hidden>
+        ƒ
+      </span>
+      <span
+        className={cn(
+          'block truncate',
+          typeof result.value === 'number' && 'tabular-nums',
+        )}
+      >
+        {text}
+      </span>
+    </span>
+  );
+}
+
+/** Read-only cell rendering: pills for selects, chips for relations, computed rollups and formulas, text otherwise. */
 export function CellValueView({
   property,
   value,
@@ -175,6 +242,17 @@ export function CellValueView({
   if (property.type === 'rollup') {
     return (
       <RollupValue
+        property={property}
+        database={database}
+        row={row}
+        databases={databases}
+        className={className}
+      />
+    );
+  }
+  if (isFormulaProperty(property)) {
+    return (
+      <FormulaValue
         property={property}
         database={database}
         row={row}
@@ -408,6 +486,27 @@ export function CellEditor({
         />
         <p className="font-sans text-xs text-ink-faint">
           Computed automatically — edit the linked rows instead.
+        </p>
+      </div>
+    );
+  }
+
+  if (isFormulaProperty(property)) {
+    return (
+      <div className="flex flex-col gap-1 py-1">
+        <FormulaValue
+          property={property}
+          database={database}
+          row={row}
+          databases={databases}
+          className="font-sans text-sm text-ink"
+        />
+        <p className="font-mono text-xs text-ink-faint">
+          {property.formulaExpression || 'No expression set.'}
+        </p>
+        <p className="font-sans text-xs text-ink-faint">
+          Computed automatically — edit the expression or the referenced
+          properties.
         </p>
       </div>
     );
