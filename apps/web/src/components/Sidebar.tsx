@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Search, Plus, ChevronRight, FileText } from 'lucide-react';
+import { Search, Plus, ChevronRight, FileText, Table2 } from 'lucide-react';
 import type { FolioPage } from '../types';
+import type { FolioDatabase } from '../database-types';
 import { cn } from '@folio/ui/cn';
 
 export interface SidebarProps {
@@ -8,6 +9,10 @@ export interface SidebarProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onNewPage: (parentId: string | null) => void;
+  databases: FolioDatabase[];
+  selectedDbId: string | null;
+  onSelectDatabase: (id: string) => void;
+  onNewDatabase: () => void;
 }
 
 interface TreeNode extends FolioPage {
@@ -111,7 +116,16 @@ function PageRow({
  * Sidebar — workspace identity, search, and the page tree.
  * Search filters the tree live; the + button adds a top-level page.
  */
-export function Sidebar({ pages, selectedId, onSelect, onNewPage }: SidebarProps) {
+export function Sidebar({
+  pages,
+  selectedId,
+  onSelect,
+  onNewPage,
+  databases,
+  selectedDbId,
+  onSelectDatabase,
+  onNewDatabase,
+}: SidebarProps) {
   const [query, setQuery] = useState('');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(
     () => new Set(pages.map((p) => p.id)),
@@ -204,6 +218,61 @@ export function Sidebar({ pages, selectedId, onSelect, onNewPage }: SidebarProps
         >
           <Plus className="h-4 w-4" aria-hidden />
           New page
+        </button>
+      </div>
+
+      {/* Databases */}
+      <div className="px-2 pb-2 pt-3">
+        <div className="flex items-center justify-between px-2 pb-1">
+          <span className="text-xs font-medium uppercase tracking-wide text-ink-faint">
+            Databases
+          </span>
+          <button
+            onClick={onNewDatabase}
+            aria-label="New database"
+            title="New database"
+            className="flex h-6 w-6 items-center justify-center rounded-control text-ink-faint transition-colors duration-quick hover:bg-accent-soft hover:text-ink"
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        </div>
+        {databases.length === 0 ? (
+          <p className="px-2 py-2 text-xs text-ink-faint">
+            No databases yet.
+          </p>
+        ) : (
+          <div role="list" aria-label="Databases">
+            {databases.map((db) => (
+              <div
+                key={db.id}
+                role="listitem"
+              >
+                <div
+                  data-active={selectedDbId === db.id}
+                  className="folio-row flex cursor-pointer items-center gap-2 rounded-control px-2 py-1.5 text-sm text-ink-soft"
+                  onClick={() => onSelectDatabase(db.id)}
+                  role="treeitem"
+                  aria-selected={selectedDbId === db.id}
+                >
+                  <span className="shrink-0 text-base leading-none" aria-hidden>
+                    {db.icon}
+                  </span>
+                  <span className="flex-1 truncate">{db.title || 'Untitled'}</span>
+                  <Table2
+                    className="h-3.5 w-3.5 shrink-0 text-ink-faint"
+                    aria-hidden
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <button
+          onClick={onNewDatabase}
+          className="folio-row mt-1 flex w-full items-center gap-2 rounded-control px-2.5 py-2 text-sm text-ink-soft"
+        >
+          <Plus className="h-4 w-4" aria-hidden />
+          New database
         </button>
       </div>
     </aside>
