@@ -1,4 +1,4 @@
-import { Moon, Sun, Share2, Table, Kanban } from 'lucide-react';
+import { Moon, Sun, Share2, Table, Kanban, Calendar, LayoutGrid } from 'lucide-react';
 import { Button } from '@folio/ui/button';
 import type { DatabaseView } from '../database-types';
 import { cn } from '@folio/ui/cn';
@@ -28,6 +28,8 @@ export interface TopBarProps {
 const VIEW_OPTIONS: { view: DatabaseView; label: string; icon: typeof Table }[] = [
   { view: 'table', label: 'Table', icon: Table },
   { view: 'kanban', label: 'Kanban', icon: Kanban },
+  { view: 'calendar', label: 'Calendar', icon: Calendar },
+  { view: 'gallery', label: 'Gallery', icon: LayoutGrid },
 ];
 
 /**
