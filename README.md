@@ -109,6 +109,7 @@ all welcome — start with [CONTRIBUTING.md](CONTRIBUTING.md) and the
 - [x] **Import** from Markdown, CSV, and HTML
 - [x] Block-level **comments** with threads, replies, and resolve
 - [x] Page **version history** with auto-snapshots, manual saves, preview, and one-click restore
+- [x] **File uploads** — per-page attachments with drag-and-drop, image previews, and image blocks in the editor
 - [ ] **Mobile** apps
 - [ ] **AI-assisted** writing features
 
