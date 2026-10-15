@@ -110,6 +110,7 @@ all welcome — start with [CONTRIBUTING.md](CONTRIBUTING.md) and the
 - [x] Block-level **comments** with threads, replies, and resolve
 - [x] Page **version history** with auto-snapshots, manual saves, preview, and one-click restore
 - [x] **File uploads** — per-page attachments with drag-and-drop, image previews, and image blocks in the editor
+- [x] **Public page sharing** — publish pages to the web with unguessable links (`#/p/<id>`), read-only view
 - [ ] **Mobile** apps
 - [ ] **AI-assisted** writing features
 
