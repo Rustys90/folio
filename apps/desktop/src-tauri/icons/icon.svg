@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>Folio app icon</title>
+  <desc>Minimalist document mark in manuscript blue on a transparent background.</desc>
+  <!-- Document sheet -->
+  <path fill="#2e5bff" d="M148 56h156l88 88v312a40 40 0 0 1-40 40H148a40 40 0 0 1-40-40V96a40 40 0 0 1 40-40z"/>
+  <!-- Folded corner -->
+  <path fill="#1e44cf" d="M304 56l88 88h-88V56z"/>
+  <!-- Writing lines (paper) -->
+  <rect x="156" y="196" width="160" height="20" rx="10" fill="#ffffff"/>
+  <rect x="156" y="240" width="200" height="20" rx="10" fill="#ffffff" opacity="0.85"/>
+  <rect x="156" y="284" width="120" height="20" rx="10" fill="#ffffff" opacity="0.7"/>
+  <!-- Accent dot -->
+  <circle cx="332" cy="368" r="28" fill="#ffffff"/>
+</svg>
