@@ -2,6 +2,20 @@
 
 Issues found and fixed during the v1 completion sprint. Every entry records what broke, why, and the fix — so the same bug never ships twice.
 
+## 2026-10-15 — phase2: formulas
+
+### `years` branch in `dateBetween` evaluated a nonsense comparison
+- **Found:** Self-review of `apps/web/src/formula.ts` before the test run — the `years`/`year` unit branch computed `db.getFullYear() - da.getFullYear() - (db < new Date(da.getFullYear() + 1, da.getMonth(), da.getDate()) ? 0 : 0)`, i.e. it always subtracted 0 and never adjusted for partial years.
+- **Why:** Drafted the anniversary check against the wrong anchor (the start date pushed a year forward instead of the end date compared against the start's month/day); the ternary was dead code that looked plausible at a glance.
+- **Fix:** Full-year difference with the standard month/day anniversary adjustment, mirroring the `months` branch directly above it.
+- **Status:** Fixed before commit. Covered by the formula test harness (`scripts/formula-test.ts`, 37 assertions).
+
+### `pkill -f "vite…"` matched the invoking shell and SIGTERM'd it
+- **Found:** After the dev smoke test, `pkill -f "vite.*5199"` killed the agent's own shell because the pattern appears in the shell's own command line.
+- **Why:** `pkill -f` matches full command lines, and the command line doing the killing contains the pattern.
+- **Fix:** No code change — process hygiene note: match the binary path (`pkill -f "vite( |$)"` won't help either; prefer `pkill -x node` scoped via a pidfile, or `fuser -k`). Recorded so the next worker doesn't repeat it.
+- **Status:** Process recovered; dev server stop verified via `pgrep`.
+
 ## 2026-10-15 — phase2: relations & rollups
 
 ### Rollup `count` returned undefined without a target property
