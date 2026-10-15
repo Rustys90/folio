@@ -1,0 +1,1 @@
+{"description":"Folio desktop shell — Tauri v2 wrapper around the web app","devDependencies":{"@tauri-apps/cli":"^2"},"license":"MIT","name":"@folio/desktop","private":true,"scripts":{"tauri:build":"cd src-tauri && tauri build","tauri:dev":"cd src-tauri && tauri dev"},"type":"module","version":"0.1.0"}
