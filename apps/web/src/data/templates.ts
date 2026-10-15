@@ -362,6 +362,7 @@ export function buildDatabaseFromTemplate(template: DatabaseTemplate): FolioData
   });
   const kanbanGroupBy = properties.find((p) => p.type === 'select')?.id ?? null;
   const calendarDateProp = properties.find((p) => p.type === 'date')?.id ?? null;
+  const dateProps = properties.filter((p) => p.type === 'date');
   return {
     id: newDbId('db'),
     title: template.name,
@@ -371,6 +372,8 @@ export function buildDatabaseFromTemplate(template: DatabaseTemplate): FolioData
     view: 'table',
     kanbanGroupBy,
     calendarDateProp,
+    timelineStartProp: dateProps[0]?.id ?? null,
+    timelineEndProp: dateProps[1]?.id ?? null,
     updatedAt: Date.now(),
   };
 }
