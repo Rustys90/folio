@@ -9,6 +9,8 @@ import { DatabaseRowEditor, rowTitle } from './DatabaseRowEditor';
 
 export interface DatabaseGalleryProps {
   database: FolioDatabase;
+  /** Every database — relation and rollup cells resolve across this list. */
+  databases: FolioDatabase[];
   onChange: (db: FolioDatabase) => void;
 }
 
@@ -31,10 +33,12 @@ function coverStyle(id: string): React.CSSProperties {
 
 function GalleryCard({
   database,
+  databases,
   row,
   onOpen,
 }: {
   database: FolioDatabase;
+  databases: FolioDatabase[];
   row: DatabaseRow;
   onOpen: () => void;
 }) {
@@ -73,7 +77,13 @@ function GalleryCard({
                   {prop.name}
                 </span>
                 <span className="min-w-0 flex-1 text-ink-soft">
-                  <CellValueView property={prop} value={row.cells[prop.id]} />
+                  <CellValueView
+                    property={prop}
+                    value={row.cells[prop.id]}
+                    database={database}
+                    databases={databases}
+                    row={row}
+                  />
                 </span>
               </div>
             ))}
@@ -88,7 +98,7 @@ function GalleryCard({
  * DatabaseGallery — responsive card grid. Each card gets a subtle cover
  * gradient derived from its row id; clicking a card opens the row editor.
  */
-export function DatabaseGallery({ database, onChange }: DatabaseGalleryProps) {
+export function DatabaseGallery({ database, databases, onChange }: DatabaseGalleryProps) {
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
 
   const addCard = () => {
@@ -133,6 +143,7 @@ export function DatabaseGallery({ database, onChange }: DatabaseGalleryProps) {
             <GalleryCard
               key={row.id}
               database={database}
+              databases={databases}
               row={row}
               onOpen={() => setEditingRowId(row.id)}
             />
@@ -142,6 +153,7 @@ export function DatabaseGallery({ database, onChange }: DatabaseGalleryProps) {
 
       <DatabaseRowEditor
         database={database}
+        databases={databases}
         row={editingRow}
         onClose={() => setEditingRowId(null)}
         onChange={onChange}
