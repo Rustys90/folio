@@ -8,7 +8,7 @@ import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import Placeholder from '@tiptap/extension-placeholder';
 import type { Doc as YDoc } from 'yjs';
 import type { WebsocketProvider } from 'y-websocket';
-import { FolioToggle, FolioComments } from './extensions';
+import { FolioToggle, FolioComments, FolioImage } from './extensions';
 import { isDocEmpty } from '@folio/sync/doc';
 import { cn } from '@folio/ui/cn';
 
@@ -41,13 +41,20 @@ export interface FolioEditorProps {
   onEditorChange?: (editor: Editor | null) => void;
   /** Imperative handle for the live editor, kept in sync alongside onEditorChange. */
   editorRef?: RefObject<Editor | null>;
+  /**
+   * Resolves attachment ids to displayable URLs for the `folioImage` node.
+   * Omit when the host has no attachment store — image blocks render as a
+   * quiet placeholder instead. (Captured when the editor is created.)
+   */
+  resolveAttachmentUrl?: (attachmentId: string) => string | null;
 }
 
 /**
  * <FolioEditor> — Folio's block editor.
  *
- * Paragraphs, H1–H3, bullet/numbered lists, toggles, code blocks, blockquotes
- * and dividers, backed by a Yjs document so every keystroke is collaboration-ready.
+ * Paragraphs, H1–H3, bullet/numbered lists, toggles, code blocks, blockquotes,
+ * dividers, and attachment-backed image blocks, all backed by a Yjs document
+ * so every keystroke is collaboration-ready.
  */
 export function FolioEditor({
   ydoc,
@@ -60,6 +67,7 @@ export function FolioEditor({
   initialHtml,
   onEditorChange,
   editorRef,
+  resolveAttachmentUrl,
 }: FolioEditorProps) {
   const editor = useEditor(
     {
@@ -71,6 +79,9 @@ export function FolioEditor({
         }),
         FolioToggle,
         FolioComments,
+        FolioImage.configure({
+          resolveAttachmentUrl: resolveAttachmentUrl ?? (() => null),
+        }),
         Collaboration.configure({ document: ydoc }),
         ...(provider && user ? [CollaborationCursor.configure({ provider, user })] : []),
         Placeholder.configure({
