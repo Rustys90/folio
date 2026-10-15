@@ -16,8 +16,15 @@ import { DatabaseGallery } from './components/DatabaseGallery';
 import { CommandPalette } from './components/CommandPalette';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ContentSkeleton } from './components/ContentSkeleton';
+import { TemplatePicker, type TemplateKind } from './components/TemplatePicker';
+import { ImportDialog } from './components/ImportDialog';
 import { useShortcuts } from './hooks/useShortcuts';
 import { seedPages, seedContent, seedDatabases } from './data/seed';
+import {
+  buildDatabaseFromTemplate,
+  type PageTemplate,
+  type DatabaseTemplate,
+} from './data/templates';
 import type { FolioPage, FolioIdentity } from './types';
 import type { DatabaseView, FolioDatabase } from './database-types';
 import { newDbId } from './database-types';
@@ -96,6 +103,11 @@ export function App() {
   const [syncConnected, setSyncConnected] = useState<boolean | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [templatePicker, setTemplatePicker] = useState<TemplateKind | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  // initialHtml for pages created from a template or an import, keyed by page id.
+  // FolioEditor writes it into the Yjs doc on first open (same as seed content).
+  const initialHtmlRef = useRef(new Map<string, string>());
   // Brief shimmer while the editor area swaps to a newly selected doc.
   const [switching, setSwitching] = useState(false);
   const firstRenderRef = useRef(true);
@@ -179,12 +191,24 @@ export function App() {
   }, []);
 
   const handleNewPage = useCallback(
-    (parentId: string | null) => {
+    (parentId: string | null, template?: PageTemplate | null) => {
       const id =
         typeof crypto !== 'undefined' && 'randomUUID' in crypto
           ? crypto.randomUUID()
           : `page-${Date.now()}`;
-      setPages((prev) => [...prev, { id, title: '', icon: '📄', parentId, updatedAt: Date.now() }]);
+      if (template) {
+        initialHtmlRef.current.set(id, template.initialHtml);
+      }
+      setPages((prev) => [
+        ...prev,
+        {
+          id,
+          title: template?.name ?? '',
+          icon: template?.icon ?? '📄',
+          parentId,
+          updatedAt: Date.now(),
+        },
+      ]);
       selectPage(id);
     },
     [selectPage],
@@ -214,30 +238,65 @@ export function App() {
     setPages((prev) => prev.map((p) => (p.id === id ? { ...p, title } : p)));
   }, []);
 
-  const handleNewDatabase = useCallback(() => {
-    const statusPropId = newDbId('prop');
-    const db: FolioDatabase = {
-      id: newDbId('db'),
-      title: '',
-      icon: '🗂️',
-      properties: [
-        { id: newDbId('prop'), name: 'Name', type: 'text' },
-        {
-          id: statusPropId,
-          name: 'Status',
-          type: 'select',
-          options: ['Todo', 'Doing', 'Done'],
-        },
-      ],
-      rows: [],
-      view: 'table',
-      kanbanGroupBy: statusPropId,
-      calendarDateProp: null,
-      updatedAt: Date.now(),
-    };
-    setDatabases((prev) => [...prev, db]);
-    selectDatabase(db.id);
-  }, [selectDatabase]);
+  const handleNewDatabase = useCallback(
+    (template?: DatabaseTemplate | null) => {
+      if (template) {
+        const db = buildDatabaseFromTemplate(template);
+        setDatabases((prev) => [...prev, db]);
+        selectDatabase(db.id);
+        return;
+      }
+      const statusPropId = newDbId('prop');
+      const db: FolioDatabase = {
+        id: newDbId('db'),
+        title: '',
+        icon: '🗂️',
+        properties: [
+          { id: newDbId('prop'), name: 'Name', type: 'text' },
+          {
+            id: statusPropId,
+            name: 'Status',
+            type: 'select',
+            options: ['Todo', 'Doing', 'Done'],
+          },
+        ],
+        rows: [],
+        view: 'table',
+        kanbanGroupBy: statusPropId,
+        calendarDateProp: null,
+        updatedAt: Date.now(),
+      };
+      setDatabases((prev) => [...prev, db]);
+      selectDatabase(db.id);
+    },
+    [selectDatabase],
+  );
+
+  /** Page created from an import: title + parsed HTML from the importer. */
+  const handleImportPage = useCallback(
+    (title: string, html: string) => {
+      const id =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `page-${Date.now()}`;
+      initialHtmlRef.current.set(id, html);
+      setPages((prev) => [
+        ...prev,
+        { id, title, icon: '📥', parentId: null, updatedAt: Date.now() },
+      ]);
+      selectPage(id);
+    },
+    [selectPage],
+  );
+
+  /** Database created from a CSV import (already built by the importer). */
+  const handleImportDatabase = useCallback(
+    (db: FolioDatabase) => {
+      setDatabases((prev) => [...prev, db]);
+      selectDatabase(db.id);
+    },
+    [selectDatabase],
+  );
 
   const handleDatabaseChange = useCallback((db: FolioDatabase) => {
     setDatabases((prev) => prev.map((d) => (d.id === db.id ? db : d)));
@@ -288,7 +347,8 @@ export function App() {
         databases={databases}
         selectedDbId={selectedDbId}
         onSelectDatabase={selectDatabase}
-        onNewDatabase={handleNewDatabase}
+        onTemplatePicker={setTemplatePicker}
+        onImport={() => setImportOpen(true)}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -343,7 +403,10 @@ export function App() {
                   ydoc={getDoc(selectedPage.id)}
                   provider={provider}
                   user={identity}
-                  initialHtml={seedContent[selectedPage.id]}
+                  initialHtml={
+                    seedContent[selectedPage.id] ??
+                    initialHtmlRef.current.get(selectedPage.id)
+                  }
                 />
               </div>
             ) : (
@@ -365,6 +428,27 @@ export function App() {
         onNewDatabase={handleNewDatabase}
         dark={dark}
         onToggleDark={toggleDark}
+      />
+
+      {/* Template gallery */}
+      {templatePicker && (
+        <TemplatePicker
+          kind={templatePicker}
+          open
+          onOpenChange={(open) => {
+            if (!open) setTemplatePicker(null);
+          }}
+          onSelectPage={(template) => handleNewPage(null, template)}
+          onSelectDatabase={(template) => handleNewDatabase(template)}
+        />
+      )}
+
+      {/* Import dialog */}
+      <ImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImportPage={handleImportPage}
+        onImportDatabase={handleImportDatabase}
       />
 
       {/* Share dialog */}
