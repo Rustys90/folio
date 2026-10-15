@@ -1,0 +1,1 @@
+{"compilerOptions":{"noEmit":true,"types":["vite/client"]},"extends":"../../tsconfig.base.json","include":["src","vite.config.ts"],"paths":{"@folio/editor/*":["../../packages/editor/src/*"],"@folio/sync/*":["../../packages/sync/src/*"],"@folio/ui/*":["../../packages/ui/src/*"]}}
