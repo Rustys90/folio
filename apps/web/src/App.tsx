@@ -9,8 +9,16 @@ import { ModalRoot, ModalContent, ModalTitle, ModalDescription } from '@folio/ui
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { EmptyState } from './components/EmptyState';
-import { seedPages, seedContent } from './data/seed';
+import { DatabaseTable } from './components/DatabaseTable';
+import { DatabaseKanban } from './components/DatabaseKanban';
+import { CommandPalette } from './components/CommandPalette';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { ContentSkeleton } from './components/ContentSkeleton';
+import { useShortcuts } from './hooks/useShortcuts';
+import { seedPages, seedContent, seedDatabases } from './data/seed';
 import type { FolioPage, FolioIdentity } from './types';
+import type { DatabaseView, FolioDatabase } from './database-types';
+import { newDbId } from './database-types';
 
 const SYNC_URL =
   typeof import.meta !== 'undefined'
@@ -18,6 +26,7 @@ const SYNC_URL =
     : undefined;
 
 const CURSOR_COLORS = ['#2e5bff', '#e11d48', '#059669', '#d97706', '#7c3aed', '#0891b2'];
+const DATABASES_KEY = 'folio-databases';
 
 function loadIdentity(): FolioIdentity {
   try {
@@ -38,23 +47,42 @@ function loadIdentity(): FolioIdentity {
   return identity;
 }
 
-function pageIdFromHash(): string | null {
-  const match = window.location.hash.match(/^#\/([\w-]+)$/);
-  return match ? match[1]! : null;
+function loadDatabases(): FolioDatabase[] {
+  try {
+    const raw = localStorage.getItem(DATABASES_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as FolioDatabase[];
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {
+    /* fall through to seed */
+  }
+  return seedDatabases;
+}
+
+/** Deep-link: `#/db/<id>` selects a database, `#/<id>` selects a page. */
+function selectionFromHash(): { pageId: string | null; dbId: string | null } {
+  const dbMatch = window.location.hash.match(/^#\/db\/([\w-]+)$/);
+  if (dbMatch) return { pageId: null, dbId: dbMatch[1]! };
+  const pageMatch = window.location.hash.match(/^#\/([\w-]+)$/);
+  return { pageId: pageMatch ? pageMatch[1]! : null, dbId: null };
 }
 
 /**
  * App — the Folio workspace shell.
  *
- * Owns the page tree, one Yjs document per page, the optional realtime
- * provider, theme, and the share dialog. The editor itself lives in
+ * Owns the page tree, the databases, one Yjs document per page, the optional
+ * realtime provider, theme, and the share dialog. The editor itself lives in
  * @folio/editor; sync primitives in @folio/sync.
  */
 export function App() {
   const [pages, setPages] = useState<FolioPage[]>(seedPages);
+  const [databases, setDatabases] = useState<FolioDatabase[]>(loadDatabases);
+  const [initialSelection] = useState(selectionFromHash);
   const [selectedId, setSelectedId] = useState<string | null>(
-    () => pageIdFromHash() ?? seedPages[0]?.id ?? null,
+    () => initialSelection.pageId ?? seedPages[0]?.id ?? null,
   );
+  const [selectedDbId, setSelectedDbId] = useState<string | null>(() => initialSelection.dbId);
   const [dark, setDark] = useState<boolean>(() => {
     try {
       return localStorage.getItem('folio-theme') === 'dark';
@@ -65,6 +93,10 @@ export function App() {
   const [shareOpen, setShareOpen] = useState(false);
   const [syncConnected, setSyncConnected] = useState<boolean | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  // Brief shimmer while the editor area swaps to a newly selected doc.
+  const [switching, setSwitching] = useState(false);
+  const firstRenderRef = useRef(true);
 
   const docsRef = useRef(new Map<string, YDoc>());
   const syncRef = useRef<FolioSyncProvider | null>(null);
@@ -113,28 +145,112 @@ export function App() {
     }
   }, [dark]);
 
-  // Deep-link the open page
+  // Persist databases
   useEffect(() => {
-    window.location.hash = selectedId ? `#/${selectedId}` : '';
-  }, [selectedId]);
+    try {
+      localStorage.setItem(DATABASES_KEY, JSON.stringify(databases));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [databases]);
 
-  const selectedPage = pages.find((p) => p.id === selectedId) ?? null;
+  // Deep-link the open page or database
+  useEffect(() => {
+    window.location.hash = selectedDbId
+      ? `#/db/${selectedDbId}`
+      : selectedId
+        ? `#/${selectedId}`
+        : '';
+  }, [selectedId, selectedDbId]);
 
-  const handleNewPage = useCallback((parentId: string | null) => {
-    const id =
-      typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `page-${Date.now()}`;
-    setPages((prev) => [
-      ...prev,
-      { id, title: '', icon: '📄', parentId, updatedAt: Date.now() },
-    ]);
+  const selectedPage = selectedDbId ? null : (pages.find((p) => p.id === selectedId) ?? null);
+  const selectedDb = databases.find((d) => d.id === selectedDbId) ?? null;
+
+  const selectPage = useCallback((id: string) => {
     setSelectedId(id);
+    setSelectedDbId(null);
   }, []);
+
+  const selectDatabase = useCallback((id: string) => {
+    setSelectedDbId(id);
+    setSelectedId(null);
+  }, []);
+
+  const handleNewPage = useCallback(
+    (parentId: string | null) => {
+      const id =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `page-${Date.now()}`;
+      setPages((prev) => [...prev, { id, title: '', icon: '📄', parentId, updatedAt: Date.now() }]);
+      selectPage(id);
+    },
+    [selectPage],
+  );
+
+  const togglePalette = useCallback(() => setPaletteOpen((open) => !open), []);
+  const toggleDark = useCallback(() => setDark((d) => !d), []);
+  const newTopLevelPage = useCallback(() => handleNewPage(null), [handleNewPage]);
+  useShortcuts({
+    onCommandPalette: togglePalette,
+    onNewPage: newTopLevelPage,
+    onToggleDark: toggleDark,
+  });
+
+  // Brief shimmer on page/database switch to smooth the editor transition.
+  useEffect(() => {
+    if (firstRenderRef.current) {
+      firstRenderRef.current = false;
+      return;
+    }
+    setSwitching(true);
+    const timer = window.setTimeout(() => setSwitching(false), 150);
+    return () => window.clearTimeout(timer);
+  }, [selectedId, selectedDbId]);
 
   const handleRename = useCallback((id: string, title: string) => {
     setPages((prev) => prev.map((p) => (p.id === id ? { ...p, title } : p)));
   }, []);
+
+  const handleNewDatabase = useCallback(() => {
+    const statusPropId = newDbId('prop');
+    const db: FolioDatabase = {
+      id: newDbId('db'),
+      title: '',
+      icon: '🗂️',
+      properties: [
+        { id: newDbId('prop'), name: 'Name', type: 'text' },
+        {
+          id: statusPropId,
+          name: 'Status',
+          type: 'select',
+          options: ['Todo', 'Doing', 'Done'],
+        },
+      ],
+      rows: [],
+      view: 'table',
+      kanbanGroupBy: statusPropId,
+      updatedAt: Date.now(),
+    };
+    setDatabases((prev) => [...prev, db]);
+    selectDatabase(db.id);
+  }, [selectDatabase]);
+
+  const handleDatabaseChange = useCallback((db: FolioDatabase) => {
+    setDatabases((prev) => prev.map((d) => (d.id === db.id ? db : d)));
+  }, []);
+
+  const handleDatabaseTitleChange = useCallback((id: string, title: string) => {
+    setDatabases((prev) => prev.map((d) => (d.id === id ? { ...d, title } : d)));
+  }, []);
+
+  const handleViewChange = useCallback(
+    (view: DatabaseView) => {
+      if (!selectedDbId) return;
+      setDatabases((prev) => prev.map((d) => (d.id === selectedDbId ? { ...d, view } : d)));
+    },
+    [selectedDbId],
+  );
 
   const handleCopyLink = useCallback(async () => {
     if (!selectedId) return;
@@ -152,37 +268,78 @@ export function App() {
     <div className="flex h-full bg-paper text-ink">
       <Sidebar
         pages={pages}
-        selectedId={selectedId}
-        onSelect={setSelectedId}
+        selectedId={selectedDbId ? null : selectedId}
+        onSelect={selectPage}
         onNewPage={handleNewPage}
+        databases={databases}
+        selectedDbId={selectedDbId}
+        onSelectDatabase={selectDatabase}
+        onNewDatabase={handleNewDatabase}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar
-          page={selectedPage}
-          onTitleChange={handleRename}
+          doc={selectedDb ?? selectedPage}
+          onTitleChange={selectedDb ? handleDatabaseTitleChange : handleRename}
+          databaseView={selectedDb ? selectedDb.view : null}
+          onViewChange={handleViewChange}
           dark={dark}
           onToggleDark={() => setDark((d) => !d)}
           syncConnected={syncConnected}
           onShare={() => setShareOpen(true)}
+          canShare={selectedPage !== null}
         />
 
         <main className="folio-scroll folio-enter-content min-h-0 flex-1 overflow-y-auto">
-          {selectedPage ? (
-            <div className="mx-auto w-full max-w-3xl px-8 pb-32 pt-10 md:px-12">
-              <FolioEditor
-                key={selectedPage.id}
-                ydoc={getDoc(selectedPage.id)}
-                provider={provider}
-                user={identity}
-                initialHtml={seedContent[selectedPage.id]}
-              />
-            </div>
-          ) : (
-            <EmptyState onNewPage={() => handleNewPage(null)} />
-          )}
+          <ErrorBoundary>
+            {switching ? (
+              <ContentSkeleton />
+            ) : selectedDb ? (
+              <div className="mx-auto w-full max-w-5xl px-8 pb-32 pt-8">
+                {selectedDb.view === 'table' ? (
+                  <DatabaseTable
+                    key={selectedDb.id}
+                    database={selectedDb}
+                    onChange={handleDatabaseChange}
+                  />
+                ) : (
+                  <DatabaseKanban
+                    key={selectedDb.id}
+                    database={selectedDb}
+                    onChange={handleDatabaseChange}
+                  />
+                )}
+              </div>
+            ) : selectedPage ? (
+              <div className="mx-auto w-full max-w-3xl px-8 pb-32 pt-10 md:px-12">
+                <FolioEditor
+                  key={selectedPage.id}
+                  ydoc={getDoc(selectedPage.id)}
+                  provider={provider}
+                  user={identity}
+                  initialHtml={seedContent[selectedPage.id]}
+                />
+              </div>
+            ) : (
+              <EmptyState onNewPage={() => handleNewPage(null)} />
+            )}
+          </ErrorBoundary>
         </main>
       </div>
+
+      {/* Command palette */}
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        pages={pages}
+        databases={databases}
+        onSelectPage={selectPage}
+        onSelectDatabase={selectDatabase}
+        onNewPage={newTopLevelPage}
+        onNewDatabase={handleNewDatabase}
+        dark={dark}
+        onToggleDark={toggleDark}
+      />
 
       {/* Share dialog */}
       <ModalRoot open={shareOpen} onOpenChange={setShareOpen}>
@@ -199,8 +356,8 @@ export function App() {
             </Button>
           </div>
           <p className="mt-3 text-xs leading-relaxed text-ink-faint">
-            Folio links are local-first. Without a sync server, the link opens the
-            page shell on this device.
+            Folio links are local-first. Without a sync server, the link opens the page shell on
+            this device.
           </p>
         </ModalContent>
       </ModalRoot>
