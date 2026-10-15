@@ -108,6 +108,7 @@ all welcome — start with [CONTRIBUTING.md](CONTRIBUTING.md) and the
 - [x] Page and database **templates**
 - [x] **Import** from Markdown, CSV, and HTML
 - [x] Block-level **comments** with threads, replies, and resolve
+- [x] Page **version history** with auto-snapshots, manual saves, preview, and one-click restore
 - [ ] **Mobile** apps
 - [ ] **AI-assisted** writing features
 
