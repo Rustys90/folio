@@ -1,0 +1,108 @@
+@import 'tailwindcss';
+
+/* Folio app shell — layout, liquid glass, and motion. */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* Liquid glass — frosted translucency with depth. */
+.glass {
+  background: var(--color-glass);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(1.6);
+}
+
+.glass-strong {
+  background: var(--color-glass);
+  -webkit-backdrop-filter: blur(28px) saturate(1.8);
+  backdrop-filter: blur(28px) saturate(1.8);
+  box-shadow: var(--shadow-glass);
+}
+
+/* Quiet scrollbars */
+.folio-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-hairline) transparent;
+}
+.folio-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.folio-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-hairline);
+  border-radius: 999px;
+}
+.folio-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* One orchestrated entrance — sidebar settles, content rises. */
+@keyframes folio-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes folio-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.folio-enter-content {
+  animation: folio-rise var(--duration-calm) var(--ease-folio) both;
+}
+.folio-enter-sidebar {
+  animation: folio-slide-in var(--duration-calm) var(--ease-folio) both;
+}
+
+/* Sidebar page rows */
+.folio-row {
+  transition:
+    background-color var(--duration-quick) var(--ease-folio),
+    color var(--duration-quick) var(--ease-folio);
+}
+.folio-row:hover {
+  background: var(--color-accent-soft);
+}
+.folio-row[data-active='true'] {
+  background: var(--color-accent-soft);
+  color: var(--color-ink);
+  font-weight: 500;
+}
+
+/* Title input — invisible until focused */
+.folio-title-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  width: 100%;
+}
+.folio-title-input:focus {
+  box-shadow: 0 2px 0 0 var(--color-accent);
+}
+
+/* Selection */
+::selection {
+  background: var(--color-accent-soft);
+}
