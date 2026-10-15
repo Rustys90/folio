@@ -442,6 +442,10 @@ export function DatabaseTable({
         database.kanbanGroupBy === propertyId ? null : database.kanbanGroupBy,
       calendarDateProp:
         database.calendarDateProp === propertyId ? null : database.calendarDateProp,
+      timelineStartProp:
+        database.timelineStartProp === propertyId ? null : database.timelineStartProp,
+      timelineEndProp:
+        database.timelineEndProp === propertyId ? null : database.timelineEndProp,
       updatedAt: Date.now(),
     });
     setSort((s) => (s?.propertyId === propertyId ? null : s));
