@@ -830,24 +830,29 @@ export function App() {
                     <DatabaseTable
                       key={selectedDb.id}
                       database={selectedDb}
+                      databases={databases}
                       onChange={handleDatabaseChange}
+                      onDatabasesChange={setDatabases}
                     />
                   ) : selectedDb.view === 'kanban' ? (
                     <DatabaseKanban
                       key={selectedDb.id}
                       database={selectedDb}
+                      databases={databases}
                       onChange={handleDatabaseChange}
                     />
                   ) : selectedDb.view === 'calendar' ? (
                     <DatabaseCalendar
                       key={selectedDb.id}
                       database={selectedDb}
+                      databases={databases}
                       onChange={handleDatabaseChange}
                     />
                   ) : (
                     <DatabaseGallery
                       key={selectedDb.id}
                       database={selectedDb}
+                      databases={databases}
                       onChange={handleDatabaseChange}
                     />
                   )}
