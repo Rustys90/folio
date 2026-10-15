@@ -118,6 +118,103 @@ declare module '@tiptap/core' {
   }
 }
 
+export interface FolioImageOptions {
+  /**
+   * Resolve an attachment id to a displayable URL. The web app passes the
+   * AttachmentStore lookup here; the node itself stores only the id, so
+   * megabytes of file bytes never land in the Yjs document.
+   */
+  resolveAttachmentUrl: (attachmentId: string) => string | null;
+}
+
+/**
+ * FolioImage — an image block that references a page attachment.
+ *
+ * Written from scratch (clean-room). The node keeps `attachmentId` + `alt` as
+ * attributes and resolves the actual `src` through the host's
+ * `resolveAttachmentUrl` option — in the node view for editing, and at
+ * `renderHTML` time so `getHTML()` snapshots (version history, export) show
+ * the image without duplicating bytes. When the attachment is gone, the block
+ * renders a quiet placeholder instead of a broken image.
+ */
+export const FolioImage = Node.create<FolioImageOptions>({
+  name: 'folioImage',
+
+  group: 'block',
+  atom: true,
+  draggable: true,
+  selectable: true,
+
+  addOptions() {
+    return { resolveAttachmentUrl: () => null };
+  },
+
+  addAttributes() {
+    return {
+      attachmentId: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-attachment-id'),
+        renderHTML: (attributes) =>
+          attributes.attachmentId ? { 'data-attachment-id': attributes.attachmentId } : {},
+      },
+      alt: {
+        default: '',
+        parseHTML: (element) => element.getAttribute('alt') ?? '',
+        renderHTML: (attributes) => (attributes.alt ? { alt: attributes.alt } : {}),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: 'img[data-folio-image]' }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    // `this` is the extension context ({ name, options, ... }) — TipTap binds
+    // config fields to it (see getExtensionField in @tiptap/core).
+    const attachmentId = HTMLAttributes['data-attachment-id'] as string | undefined;
+    const src = attachmentId ? this.options.resolveAttachmentUrl(attachmentId) : null;
+    return ['img', mergeAttributes(HTMLAttributes, { 'data-folio-image': '', src: src ?? '' })];
+  },
+
+  addNodeView() {
+    return ({ node }) => {
+      const dom = document.createElement('figure');
+      dom.className = 'folio-image';
+
+      const render = (attrs: Record<string, unknown>) => {
+        const attachmentId = typeof attrs.attachmentId === 'string' ? attrs.attachmentId : null;
+        const src = attachmentId ? this.options.resolveAttachmentUrl(attachmentId) : null;
+        const alt = typeof attrs.alt === 'string' ? attrs.alt : '';
+        dom.replaceChildren();
+        if (src) {
+          const img = document.createElement('img');
+          img.src = src;
+          img.alt = alt;
+          // The block itself is draggable; the inner img shouldn't start its own drag.
+          img.draggable = false;
+          dom.append(img);
+        } else {
+          const missing = document.createElement('figcaption');
+          missing.className = 'folio-image-missing';
+          missing.textContent = 'Image unavailable — its attachment was removed.';
+          dom.append(missing);
+        }
+      };
+      render(node.attrs);
+
+      return {
+        dom,
+        update: (updatedNode) => {
+          if (updatedNode.type.name !== 'folioImage') return false;
+          render(updatedNode.attrs);
+          return true;
+        },
+      };
+    };
+  },
+});
+
 const folioCommentsKey = new PluginKey('folioComments');
 
 /**
