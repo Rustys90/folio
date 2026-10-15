@@ -1,6 +1,17 @@
-import { Moon, Sun, Share2, Table, Kanban, Calendar, LayoutGrid } from 'lucide-react';
+import {
+  Moon,
+  Sun,
+  Share2,
+  Table,
+  Kanban,
+  Calendar,
+  LayoutGrid,
+  MessageSquare,
+  MessageSquarePlus,
+} from 'lucide-react';
 import { Button } from '@folio/ui/button';
 import type { DatabaseView } from '../database-types';
+import { isMacPlatform } from '../hooks/useShortcuts';
 import { cn } from '@folio/ui/cn';
 
 /** Anything with an editable title shown in the top bar — a page or a database. */
@@ -23,6 +34,16 @@ export interface TopBarProps {
   onShare: () => void;
   /** Whether the share action applies to the open doc (pages only). */
   canShare: boolean;
+  /** Unresolved comment count for the open page. */
+  commentCount: number;
+  /** Whether the comments panel is open. */
+  commentsOpen: boolean;
+  /** Toggle the comments panel. */
+  onToggleComments: () => void;
+  /** Start a comment on the current block/selection. */
+  onAddComment: () => void;
+  /** Comments apply to pages, not databases. */
+  showComments: boolean;
 }
 
 const VIEW_OPTIONS: { view: DatabaseView; label: string; icon: typeof Table }[] = [
@@ -46,7 +67,13 @@ export function TopBar({
   syncConnected,
   onShare,
   canShare,
+  commentCount,
+  commentsOpen,
+  onToggleComments,
+  onAddComment,
+  showComments,
 }: TopBarProps) {
+  const commentHint = isMacPlatform() ? '⌘⇧M' : 'Ctrl+Shift+M';
   return (
     <header className="glass-strong flex h-14 shrink-0 items-center gap-3 border-b border-hairline px-5">
       {doc ? (
@@ -81,9 +108,7 @@ export function TopBar({
               className={cn(
                 'flex items-center gap-1.5 rounded-[0.4rem] px-2.5 py-1 font-sans text-xs font-medium',
                 'transition-colors duration-quick ease-folio',
-                databaseView === view
-                  ? 'bg-accent-soft text-ink'
-                  : 'text-ink-faint hover:text-ink',
+                databaseView === view ? 'bg-accent-soft text-ink' : 'text-ink-faint hover:text-ink',
               )}
             >
               <Icon className="h-3.5 w-3.5" aria-hidden />
@@ -116,6 +141,43 @@ export function TopBar({
           />
           {syncConnected === null ? 'Offline' : syncConnected ? 'Live' : 'Offline'}
         </span>
+
+        {showComments && (
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Add comment"
+              title={`Add comment (${commentHint})`}
+              onClick={onAddComment}
+            >
+              <MessageSquarePlus className="h-4 w-4" aria-hidden />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={
+                commentsOpen
+                  ? 'Close comments'
+                  : `Open comments${commentCount > 0 ? ` (${commentCount} open)` : ''}`
+              }
+              aria-pressed={commentsOpen}
+              title="Comments"
+              onClick={onToggleComments}
+              className="relative"
+            >
+              <MessageSquare className="h-4 w-4" aria-hidden />
+              {commentCount > 0 && (
+                <span
+                  className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 font-sans text-[10px] font-semibold text-accent-ink"
+                  aria-hidden
+                >
+                  {commentCount > 99 ? '99+' : commentCount}
+                </span>
+              )}
+            </Button>
+          </>
+        )}
 
         <Button
           variant="ghost"
