@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   MessageSquare,
   MessageSquarePlus,
+  History,
 } from 'lucide-react';
 import { Button } from '@folio/ui/button';
 import type { DatabaseView } from '../database-types';
@@ -44,6 +45,12 @@ export interface TopBarProps {
   onAddComment: () => void;
   /** Comments apply to pages, not databases. */
   showComments: boolean;
+  /** Whether the version-history toggle is shown (pages only). */
+  showHistory: boolean;
+  /** Whether the history panel is open. */
+  historyOpen: boolean;
+  /** Toggle the version-history panel. */
+  onToggleHistory: () => void;
 }
 
 const VIEW_OPTIONS: { view: DatabaseView; label: string; icon: typeof Table }[] = [
@@ -72,6 +79,9 @@ export function TopBar({
   onToggleComments,
   onAddComment,
   showComments,
+  showHistory,
+  historyOpen,
+  onToggleHistory,
 }: TopBarProps) {
   const commentHint = isMacPlatform() ? '⌘⇧M' : 'Ctrl+Shift+M';
   return (
@@ -177,6 +187,19 @@ export function TopBar({
               )}
             </Button>
           </>
+        )}
+
+        {showHistory && (
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={historyOpen ? 'Close version history' : 'Open version history'}
+            aria-pressed={historyOpen}
+            title="Version history"
+            onClick={onToggleHistory}
+          >
+            <History className="h-4 w-4" aria-hidden />
+          </Button>
         )}
 
         <Button
