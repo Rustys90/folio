@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { DragEvent } from 'react';
 import type { Doc as YDoc } from 'yjs';
 import type { WebsocketProvider } from 'y-websocket';
 import type { Editor } from '@tiptap/core';
-import { History as HistoryIcon } from 'lucide-react';
+import { History as HistoryIcon, Paperclip } from 'lucide-react';
 import { FolioEditor } from '@folio/editor/editor';
 import { createFolioDoc } from '@folio/sync/doc';
 import { createSyncProvider, type FolioSyncProvider } from '@folio/sync/provider';
@@ -17,6 +18,7 @@ import { DatabaseCalendar } from './components/DatabaseCalendar';
 import { DatabaseGallery } from './components/DatabaseGallery';
 import { CommandPalette } from './components/CommandPalette';
 import { CommentsPanel } from './components/Comments';
+import { AttachmentsPanel } from './components/Attachments';
 import { PageHistory } from './components/PageHistory';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ContentSkeleton } from './components/ContentSkeleton';
@@ -43,6 +45,7 @@ import {
   type CommentDraft,
   type CommentThread,
 } from './comments';
+import { localAttachmentStore, type Attachment } from './attachments';
 
 const SYNC_URL =
   typeof import.meta !== 'undefined'
@@ -185,6 +188,13 @@ export function App() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [previewVersion, setPreviewVersion] = useState<PageVersion | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<PageVersion | null>(null);
+  // File attachments for the open page.
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
+  const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null);
+  const [draggingAttachments, setDraggingAttachments] = useState(false);
+  const dragCounterRef = useRef(0);
   // initialHtml for pages created from a template or an import, keyed by page id.
   // FolioEditor writes it into the Yjs doc on first open (same as seed content).
   const initialHtmlRef = useRef(new Map<string, string>());
@@ -264,6 +274,19 @@ export function App() {
     setCommentDraft(null);
     setThreads(selectedId ? localCommentStore.list(selectedId) : []);
   }, [selectedId]);
+
+  // Load this page's attachments; clear upload notices on page change.
+  useEffect(() => {
+    setAttachmentNotice(null);
+    setAttachments(selectedId ? localAttachmentStore.list(selectedId) : []);
+  }, [selectedId]);
+
+  // Upload notices clear themselves after a few seconds.
+  useEffect(() => {
+    if (!attachmentNotice) return;
+    const timer = window.setTimeout(() => setAttachmentNotice(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [attachmentNotice]);
 
   // Persist comment threads per page.
   useEffect(() => {
@@ -517,6 +540,130 @@ export function App() {
     setThreads((prev) => prev.filter((thread) => thread.id !== threadId));
   }, []);
 
+  /** Stable resolver for the editor's folioImage blocks. */
+  const resolveAttachmentUrl = useCallback(
+    (id: string) => localAttachmentStore.get(id),
+    [],
+  );
+
+  /** Persist picked or dropped files for the open page, reporting failures. */
+  const handleUploadAttachments = useCallback(
+    async (files: File[]) => {
+      if (!selectedPage || files.length === 0) return;
+      setUploadingAttachments(true);
+      let failed = 0;
+      let lastError = 'Upload failed.';
+      for (const file of files) {
+        try {
+          await localAttachmentStore.save(selectedPage.id, file);
+        } catch (error) {
+          failed++;
+          lastError = error instanceof Error ? error.message : 'Upload failed.';
+        }
+      }
+      setUploadingAttachments(false);
+      setAttachments(localAttachmentStore.list(selectedPage.id));
+      if (failed > 0) {
+        setAttachmentNotice(
+          failed === files.length
+            ? lastError
+            : `${failed} of ${files.length} files could not be attached. ${lastError}`,
+        );
+      }
+      setAttachmentsOpen(true);
+    },
+    [selectedPage],
+  );
+
+  const handleRemoveAttachment = useCallback(
+    (id: string) => {
+      localAttachmentStore.remove(id);
+      if (selectedId) setAttachments(localAttachmentStore.list(selectedId));
+    },
+    [selectedId],
+  );
+
+  const handleDownloadAttachment = useCallback((attachment: Attachment) => {
+    const url = localAttachmentStore.get(attachment.id);
+    if (!url) {
+      setAttachmentNotice('The file data is missing from browser storage.');
+      return;
+    }
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = attachment.name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }, []);
+
+  /**
+   * Insert an uploaded image as a folioImage block at the cursor. The block
+   * stores the attachment id (not the bytes); the editor resolves the URL
+   * through the attachment store.
+   */
+  const handleInsertAttachmentImage = useCallback(
+    (attachment: Attachment) => {
+      if (!activeEditor || !selectedPage) {
+        setAttachmentNotice('Open the page first, then insert the image.');
+        setAttachmentsOpen(true);
+        return;
+      }
+      activeEditor
+        .chain()
+        .focus()
+        .insertContent({
+          type: 'folioImage',
+          attrs: { attachmentId: attachment.id, alt: attachment.name },
+        })
+        .run();
+      setAttachmentsOpen(false);
+    },
+    [activeEditor, selectedPage],
+  );
+
+  const dropHasFiles = (event: DragEvent) =>
+    Array.from(event.dataTransfer.types).includes('Files');
+
+  /** Show the drop overlay while files are dragged over the page. */
+  const handleDragEnter = useCallback(
+    (event: DragEvent) => {
+      if (!selectedPage || !dropHasFiles(event)) return;
+      event.preventDefault();
+      dragCounterRef.current++;
+      setDraggingAttachments(true);
+    },
+    [selectedPage],
+  );
+
+  const handleDragLeave = useCallback(() => {
+    if (dragCounterRef.current === 0) return;
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) setDraggingAttachments(false);
+  }, []);
+
+  const handleDragOver = useCallback(
+    (event: DragEvent) => {
+      if (!selectedPage || !dropHasFiles(event)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+    },
+    [selectedPage],
+  );
+
+  const handleDrop = useCallback(
+    (event: DragEvent) => {
+      if (!selectedPage) return;
+      event.preventDefault();
+      dragCounterRef.current = 0;
+      setDraggingAttachments(false);
+      if (dropHasFiles(event) && event.dataTransfer.files.length > 0) {
+        void handleUploadAttachments([...event.dataTransfer.files]);
+      }
+    },
+    [selectedPage, handleUploadAttachments],
+  );
+
   /** Scroll the editor to a thread's anchored block and flash it. */
   const handleFocusThread = useCallback(
     (thread: CommentThread) => {
@@ -591,9 +738,29 @@ export function App() {
             showHistory={selectedPage !== null}
             historyOpen={historyOpen}
             onToggleHistory={() => setHistoryOpen((open) => !open)}
+            showAttachments={selectedPage !== null}
+            attachmentsOpen={attachmentsOpen}
+            onToggleAttachments={() => setAttachmentsOpen((open) => !open)}
+            attachmentCount={attachments.length}
           />
 
-          <main className="folio-scroll folio-enter-content min-h-0 flex-1 overflow-y-auto">
+          <main
+            className="folio-scroll folio-enter-content relative min-h-0 flex-1 overflow-y-auto"
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+          >
+            {draggingAttachments && selectedPage && (
+              <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center p-8">
+                <div className="glass-strong flex items-center gap-3 rounded-control border-2 border-dashed border-accent/60 px-8 py-6 shadow-glass">
+                  <Paperclip className="h-5 w-5 shrink-0 text-accent" aria-hidden />
+                  <p className="font-sans text-base font-medium text-ink">
+                    Drop files to attach them to this page
+                  </p>
+                </div>
+              </div>
+            )}
             <ErrorBoundary>
               {switching ? (
                 <ContentSkeleton />
@@ -669,6 +836,7 @@ export function App() {
                       user={identity}
                       onEditorChange={setActiveEditor}
                       editorRef={historyEditorRef}
+                      resolveAttachmentUrl={resolveAttachmentUrl}
                       initialHtml={
                         seedContent[selectedPage.id] ?? initialHtmlRef.current.get(selectedPage.id)
                       }
@@ -708,6 +876,22 @@ export function App() {
             previewVersionId={previewVersion?.id ?? null}
             onPreview={setPreviewVersion}
             onClose={() => setHistoryOpen(false)}
+          />
+        )}
+        {selectedPage && (
+          <AttachmentsPanel
+            open={attachmentsOpen}
+            pageId={selectedPage.id}
+            attachments={attachments}
+            uploading={uploadingAttachments}
+            notice={attachmentNotice}
+            urlFor={resolveAttachmentUrl}
+            onUpload={(files) => void handleUploadAttachments(files)}
+            onDownload={handleDownloadAttachment}
+            onRemove={handleRemoveAttachment}
+            onInsertImage={handleInsertAttachmentImage}
+            onDismissNotice={() => setAttachmentNotice(null)}
+            onClose={() => setAttachmentsOpen(false)}
           />
         )}
       </div>
