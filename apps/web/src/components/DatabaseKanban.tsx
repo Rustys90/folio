@@ -21,6 +21,8 @@ const EMPTY_GROUP = '__none__';
 
 export interface DatabaseKanbanProps {
   database: FolioDatabase;
+  /** Every database — relation and rollup cells resolve across this list. */
+  databases: FolioDatabase[];
   onChange: (db: FolioDatabase) => void;
 }
 
@@ -34,6 +36,7 @@ function cardTitle(db: FolioDatabase, row: DatabaseRow): string {
 
 function KanbanCard({
   database,
+  databases,
   row,
   onOpen,
   onDragStart,
@@ -41,6 +44,7 @@ function KanbanCard({
   dragging,
 }: {
   database: FolioDatabase;
+  databases: FolioDatabase[];
   row: DatabaseRow;
   onOpen: () => void;
   onDragStart: (e: React.DragEvent) => void;
@@ -82,7 +86,13 @@ function KanbanCard({
                 {prop.name}
               </span>
               <span className="min-w-0 flex-1 text-ink-soft">
-                <CellValueView property={prop} value={row.cells[prop.id]} />
+                <CellValueView
+                  property={prop}
+                  value={row.cells[prop.id]}
+                  database={database}
+                  databases={databases}
+                  row={row}
+                />
               </span>
             </div>
           ))}
@@ -97,7 +107,7 @@ function KanbanCard({
  * columns with native HTML5 drag-and-drop. Dropping a card on a column sets
  * the group property to that column's option.
  */
-export function DatabaseKanban({ database, onChange }: DatabaseKanbanProps) {
+export function DatabaseKanban({ database, databases, onChange }: DatabaseKanbanProps) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropColumn, setDropColumn] = useState<string | null>(null);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
@@ -246,6 +256,7 @@ export function DatabaseKanban({ database, onChange }: DatabaseKanbanProps) {
                 <KanbanCard
                   key={row.id}
                   database={database}
+                  databases={databases}
                   row={row}
                   dragging={draggingId === row.id}
                   onOpen={() => setEditingRowId(row.id)}
@@ -288,6 +299,9 @@ export function DatabaseKanban({ database, onChange }: DatabaseKanbanProps) {
                   <CellEditor
                     property={prop}
                     value={editingRow.cells[prop.id]}
+                    database={database}
+                    databases={databases}
+                    row={editingRow}
                     onCommit={(v) => setCell(editingRow.id, prop.id, v)}
                     onCancel={() => {}}
                     autoFocus={false}
