@@ -206,3 +206,29 @@ Issues found and fixed during the v1 completion sprint. Every entry records what
 - **Found (design):** The resize handles are children of the draggable bar element, whose own `pointerdown` starts a move-drag. Without `stopPropagation` on the handle's `pointerdown`, grabbing an edge would register both a `start`/`end` drag and (via bubbling) a `move` drag, fighting over the preview state.
 - **Fix:** Handle `onPointerDown` calls `e.stopPropagation()` before `beginDrag`; pointer capture is set on the handle, and move/up events bubble to the bar's handlers, so a single drag session still drives the whole interaction.
 - **Status:** Implemented as designed.
+
+## 2026-10-15 — phase2: database Yjs sync
+
+### `FolioIdentity` imported from the wrong module
+- **Found:** `npm run typecheck` — TS2305: `Module '"../database-types"' has no exported member 'FolioIdentity'` in the new `useDatabasesSync.ts`.
+- **Why:** `FolioIdentity` lives in `apps/web/src/types.ts`, not `database-types.ts`; the hook file was drafted with a single import line.
+- **Fix:** Split into two imports (`FolioDatabase` from `database-types`, `FolioIdentity` from `types`). Typecheck clean.
+- **Status:** Fixed before commit.
+
+### Design: fresh client must not clobber a shared workspace on first load
+- **Found (design):** With `VITE_SYNC_URL` set, the local databases doc starts empty while the server holds the shared state. Importing the localStorage backup immediately would write stale local data into the shared doc before the server's initial sync arrives.
+- **Why:** The migration rule "empty doc + localStorage backup → import" is correct offline but racy online.
+- **Fix:** When a sync server is configured, `useDatabasesSync` waits for the provider's `sync` event (initial sync complete) — with a 3s timeout fallback so a dead server never blocks startup — before deciding the doc is empty. Offline, the import happens immediately.
+- **Status:** Implemented.
+
+### Design: no-op writes must not emit Yjs updates
+- **Found (design):** The subscription path re-renders on every doc update; a careless `writeDatabases` would broadcast an update even when nothing changed, waking every subscriber (and the network) for no reason.
+- **Why:** Whole-list writes are the natural shape for a `SetStateAction`-style setter.
+- **Fix:** `writeDatabases` diffs per database id — unchanged entries are left untouched (verified by the test: a no-op write emits zero `update` events) — and the React mirror compares snapshots via JSON before setState, so local writes converge without an extra render.
+- **Status:** Implemented. Covered by `scripts/db-sync-test.ts` (28 assertions).
+
+### Design: one doc for all databases (Option A), not one doc per database
+- **Found (design):** Two candidate shapes: A — single `folio-databases` doc/room with a Y.Map of database id → database; B — one doc + room per database.
+- **Why:** Databases are edited as whole units, relations/rollups read across databases (cross-doc reads can't be atomic), and B would churn websocket rooms as databases are created/deleted.
+- **Fix:** Option A implemented: root Y.Map keyed by database id; per-database Y.Map with scalar fields, `properties` as Y.Array of Y.Maps, `rows` as Y.Array of Y.Maps with a `cells` Y.Map; relation id arrays stored as Y.Array so concurrent link edits merge. Formula/rollup values are computed at render from the snapshot and never stored.
+- **Status:** Implemented.
