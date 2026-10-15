@@ -27,9 +27,10 @@ import { ContentSkeleton } from './components/ContentSkeleton';
 import { TemplatePicker, type TemplateKind } from './components/TemplatePicker';
 import { ImportDialog } from './components/ImportDialog';
 import { useShortcuts } from './hooks/useShortcuts';
+import { useDatabasesSync } from './hooks/useDatabasesSync';
 import { usePageHistory } from './hooks/usePageHistory';
 import { formatVersionTime, type PageVersion } from './history';
-import { seedPages, seedContent, seedDatabases } from './data/seed';
+import { seedPages, seedContent } from './data/seed';
 import {
   buildDatabaseFromTemplate,
   type PageTemplate,
@@ -63,7 +64,6 @@ const SYNC_URL =
     : undefined;
 
 const CURSOR_COLORS = ['#2e5bff', '#e11d48', '#059669', '#d97706', '#7c3aed', '#0891b2'];
-const DATABASES_KEY = 'folio-databases';
 
 const collapseWhitespace = (s: string) => s.replace(/\s+/g, ' ').trim();
 
@@ -140,19 +140,6 @@ function loadIdentity(): FolioIdentity {
   return identity;
 }
 
-function loadDatabases(): FolioDatabase[] {
-  try {
-    const raw = localStorage.getItem(DATABASES_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as FolioDatabase[];
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch {
-    /* fall through to seed */
-  }
-  return seedDatabases;
-}
-
 /** Deep-link: `#/p/<id>` opens a published page, `#/db/<id>` selects a database, `#/<id>` selects a page. */
 function selectionFromHash(): {
   pageId: string | null;
@@ -176,7 +163,6 @@ function selectionFromHash(): {
  */
 export function App() {
   const [pages, setPages] = useState<FolioPage[]>(seedPages);
-  const [databases, setDatabases] = useState<FolioDatabase[]>(loadDatabases);
   const [initialSelection] = useState(selectionFromHash);
   const [selectedId, setSelectedId] = useState<string | null>(
     () => initialSelection.pageId ?? seedPages[0]?.id ?? null,
@@ -223,6 +209,9 @@ export function App() {
   const docsRef = useRef(new Map<string, YDoc>());
   const syncRef = useRef<FolioSyncProvider | null>(null);
   const identity = useMemo(loadIdentity, []);
+  // Databases live in a Yjs document (`folio:databases` room) with a
+  // localStorage write-through backup — see useDatabasesSync.
+  const [databases, setDatabases] = useDatabasesSync(identity);
   const [provider, setProvider] = useState<WebsocketProvider | null>(null);
 
   const getDoc = useCallback((id: string): YDoc => {
@@ -277,15 +266,6 @@ export function App() {
       /* ignore */
     }
   }, [dark]);
-
-  // Persist databases
-  useEffect(() => {
-    try {
-      localStorage.setItem(DATABASES_KEY, JSON.stringify(databases));
-    } catch {
-      /* storage unavailable */
-    }
-  }, [databases]);
 
   // Load this page's comment threads; drop any draft when the page changes.
   useEffect(() => {
@@ -431,7 +411,7 @@ export function App() {
       setDatabases((prev) => [...prev, db]);
       selectDatabase(db.id);
     },
-    [selectDatabase],
+    [selectDatabase, setDatabases],
   );
 
   /** Page created from an import: title + parsed HTML from the importer. */
@@ -457,16 +437,16 @@ export function App() {
       setDatabases((prev) => [...prev, db]);
       selectDatabase(db.id);
     },
-    [selectDatabase],
+    [selectDatabase, setDatabases],
   );
 
   const handleDatabaseChange = useCallback((db: FolioDatabase) => {
     setDatabases((prev) => prev.map((d) => (d.id === db.id ? db : d)));
-  }, []);
+  }, [setDatabases]);
 
   const handleDatabaseTitleChange = useCallback((id: string, title: string) => {
     setDatabases((prev) => prev.map((d) => (d.id === id ? { ...d, title } : d)));
-  }, []);
+  }, [setDatabases]);
 
   const handleViewChange = useCallback(
     (view: DatabaseView) => {
@@ -489,7 +469,7 @@ export function App() {
         }),
       );
     },
-    [selectedDbId],
+    [selectedDbId, setDatabases],
   );
 
   /** Seed HTML for a page — used by the public view before the editor ever opens it. */
