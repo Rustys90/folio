@@ -9,6 +9,7 @@ import {
   MessageSquare,
   MessageSquarePlus,
   History,
+  Paperclip,
 } from 'lucide-react';
 import { Button } from '@folio/ui/button';
 import type { DatabaseView } from '../database-types';
@@ -51,6 +52,14 @@ export interface TopBarProps {
   historyOpen: boolean;
   /** Toggle the version-history panel. */
   onToggleHistory: () => void;
+  /** Attachments apply to pages, not databases. */
+  showAttachments: boolean;
+  /** Whether the attachments panel is open. */
+  attachmentsOpen: boolean;
+  /** Toggle the attachments panel. */
+  onToggleAttachments: () => void;
+  /** Attachment count for the open page. */
+  attachmentCount: number;
 }
 
 const VIEW_OPTIONS: { view: DatabaseView; label: string; icon: typeof Table }[] = [
@@ -62,7 +71,8 @@ const VIEW_OPTIONS: { view: DatabaseView; label: string; icon: typeof Table }[] 
 
 /**
  * TopBar — current doc identity, database view switcher, sync presence,
- * theme, and sharing. Floats over the content as frosted glass.
+ * comments/history/attachments toggles, theme, and sharing. Floats over the
+ * content as frosted glass.
  */
 export function TopBar({
   doc,
@@ -82,6 +92,10 @@ export function TopBar({
   showHistory,
   historyOpen,
   onToggleHistory,
+  showAttachments,
+  attachmentsOpen,
+  onToggleAttachments,
+  attachmentCount,
 }: TopBarProps) {
   const commentHint = isMacPlatform() ? '⌘⇧M' : 'Ctrl+Shift+M';
   return (
@@ -199,6 +213,32 @@ export function TopBar({
             onClick={onToggleHistory}
           >
             <History className="h-4 w-4" aria-hidden />
+          </Button>
+        )}
+
+        {showAttachments && (
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={
+              attachmentsOpen
+                ? 'Close attachments'
+                : `Open attachments${attachmentCount > 0 ? ` (${attachmentCount})` : ''}`
+            }
+            aria-pressed={attachmentsOpen}
+            title="Attachments"
+            onClick={onToggleAttachments}
+            className="relative"
+          >
+            <Paperclip className="h-4 w-4" aria-hidden />
+            {attachmentCount > 0 && (
+              <span
+                className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 font-sans text-[10px] font-semibold text-accent-ink"
+                aria-hidden
+              >
+                {attachmentCount > 99 ? '99+' : attachmentCount}
+              </span>
+            )}
           </Button>
         )}
 
