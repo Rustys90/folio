@@ -112,6 +112,7 @@ all welcome — start with [CONTRIBUTING.md](CONTRIBUTING.md) and the
 - [x] **File uploads** — per-page attachments with drag-and-drop, image previews, and image blocks in the editor
 - [x] **Public page sharing** — publish pages to the web with unguessable links (`#/p/<id>`), read-only view
 - [x] Database **relations & rollups** — link rows across databases (with two-way back-references) and aggregate them with count/sum/average/min/max
+- [x] Database **formulas** — computed columns with a safe expression language (clean-room parser, no `eval`): arithmetic, comparisons, boolean logic, string concat, and functions (`if`, `prop`, `len`, `round`, `abs`, `min`, `max`, `today`, `dateBetween`), with circular-reference detection and inline error display
 - [ ] **Mobile** apps
 - [ ] **AI-assisted** writing features
 
