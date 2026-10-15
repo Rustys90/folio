@@ -11,6 +11,8 @@ import { TopBar } from './components/TopBar';
 import { EmptyState } from './components/EmptyState';
 import { DatabaseTable } from './components/DatabaseTable';
 import { DatabaseKanban } from './components/DatabaseKanban';
+import { DatabaseCalendar } from './components/DatabaseCalendar';
+import { DatabaseGallery } from './components/DatabaseGallery';
 import { CommandPalette } from './components/CommandPalette';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ContentSkeleton } from './components/ContentSkeleton';
@@ -230,6 +232,7 @@ export function App() {
       rows: [],
       view: 'table',
       kanbanGroupBy: statusPropId,
+      calendarDateProp: null,
       updatedAt: Date.now(),
     };
     setDatabases((prev) => [...prev, db]);
@@ -247,7 +250,18 @@ export function App() {
   const handleViewChange = useCallback(
     (view: DatabaseView) => {
       if (!selectedDbId) return;
-      setDatabases((prev) => prev.map((d) => (d.id === selectedDbId ? { ...d, view } : d)));
+      setDatabases((prev) =>
+        prev.map((d) => {
+          if (d.id !== selectedDbId) return d;
+          const next: FolioDatabase = { ...d, view };
+          // First time the calendar is selected, drive it by the first date property.
+          if (view === 'calendar' && (next.calendarDateProp ?? null) === null) {
+            next.calendarDateProp =
+              d.properties.find((p) => p.type === 'date')?.id ?? null;
+          }
+          return next;
+        }),
+      );
     },
     [selectedDbId],
   );
@@ -302,8 +316,20 @@ export function App() {
                     database={selectedDb}
                     onChange={handleDatabaseChange}
                   />
-                ) : (
+                ) : selectedDb.view === 'kanban' ? (
                   <DatabaseKanban
+                    key={selectedDb.id}
+                    database={selectedDb}
+                    onChange={handleDatabaseChange}
+                  />
+                ) : selectedDb.view === 'calendar' ? (
+                  <DatabaseCalendar
+                    key={selectedDb.id}
+                    database={selectedDb}
+                    onChange={handleDatabaseChange}
+                  />
+                ) : (
+                  <DatabaseGallery
                     key={selectedDb.id}
                     database={selectedDb}
                     onChange={handleDatabaseChange}
