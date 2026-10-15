@@ -73,3 +73,23 @@ Issues found and fixed during the v1 completion sprint. Every entry records what
 - **Why:** Shell `$(cat ...)` expansion exceeds ARG_MAX for large base64 payloads.
 - **Fix:** Direct Python API calls to `POST /tools/execute/{slug}` with `user_id`, `arguments`, `connected_account_id` in JSON body (bypasses shell entirely). Correct endpoint is `/tools/execute/{slug}`, not `/tools/{slug}/execute`.
 - **Status:** Fixed. Both demo GIFs pushed.
+
+## 2026-10-15 — phase2: block-level comments
+
+### ESLint `no-this-alias` on TipTap extension `this` capture
+- **Found:** First draft of the `FolioComments` extension captured `const extension = this` in `addProseMirrorPlugins` to reach `extension.editor.storage` from the decorations callback — `npx eslint .` failed on `@typescript-eslint/no-this-alias`.
+- **Why:** Reached for extension storage out of habit; the alias was the lint error, but the deeper smell was depending on `this.editor` binding timing inside plugin setup.
+- **Fix:** Rewrote to canonical ProseMirror plugin state: a module-scope `PluginKey`, `state.init/apply` holding the `Set<number>` of commented block indices, and the `setCommentedBlocks` command dispatching a meta-only transaction. No `this` capture at all.
+- **Status:** Fixed before commit. `npx eslint .` clean, typecheck clean.
+
+### App.tsx effect referenced `selectedPage` before its declaration
+- **Found:** `tsc` errors TS2448/TS2454 — the comment-marker paint effect was placed above the `const selectedPage = …` declaration in App.tsx.
+- **Why:** Effects were added next to the other comment effects higher in the component, but `selectedPage` is declared mid-component.
+- **Fix:** Moved the paint effect below the `selectedPage`/`selectedDb` declarations.
+- **Status:** Fixed before commit. Typecheck clean.
+
+### Comment anchors survive edits via quote re-resolution
+- **Found (design):** Storing only a block index would mis-anchor threads after inserts/deletes above the block.
+- **Why:** TipTap has no stable per-block ids in this setup.
+- **Fix:** Each anchor stores `blockIndex` + verbatim `quote` (selected text, or a block excerpt). `resolveAnchorIndex` prefers the block whose text still contains the quote, falling back to the clamped creation-time index. Documented as the seam for a future Yjs-backed CommentStore (interface already in `apps/web/src/comments.ts`).
+- **Status:** Implemented. Not a bug — recorded as the anchoring contract.
