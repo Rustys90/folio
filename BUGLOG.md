@@ -45,3 +45,9 @@ Issues found and fixed during the v1 completion sprint. Every entry records what
 - **Why:** Tailwind v4 auto-scans only the Vite root (`apps/web/`). Utilities used exclusively in `packages/ui` (`fixed`, `inset-0`, `z-50`) were never generated.
 - **Fix:** Added `@source "../../../packages/{ui,editor,sync}/src";` to `apps/web/src/app.css`. (First attempt used wrong relative depth `../../` — fixed to `../../../`.)
 - **Status:** Fixed. Verified `.fixed` present in production CSS build.
+
+### Large binary pushes: shell argument limit
+- **Found:** Pushing GIFs (>200KB base64) via Composio CLI failed with `Argument list too long`.
+- **Why:** Shell `$(cat ...)` expansion exceeds ARG_MAX for large base64 payloads.
+- **Fix:** Direct Python API calls to `POST /tools/execute/{slug}` with `user_id`, `arguments`, `connected_account_id` in JSON body (bypasses shell entirely). Correct endpoint is `/tools/execute/{slug}`, not `/tools/{slug}/execute`.
+- **Status:** Fixed. Both demo GIFs pushed.
