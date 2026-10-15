@@ -53,6 +53,7 @@ export const seedDatabases: FolioDatabase[] = [
     icon: '🗂️',
     view: 'table',
     kanbanGroupBy: 'prop-status',
+    calendarDateProp: 'prop-due',
     updatedAt: Date.now(),
     properties: [
       { id: 'prop-task', name: 'Task', type: 'text' },
