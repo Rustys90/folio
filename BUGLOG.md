@@ -33,3 +33,9 @@ Issues found and fixed during the v1 completion sprint. Every entry records what
 - **Why:** This is a Linux VM without Rust installed.
 - **Fix:** Scaffolded full Tauri v2 project (config, Cargo.toml, main.rs, icons via `tauri icon` which runs without Rust). Builds happen on maintainer machines. Documented in `apps/desktop/README.md`.
 - **Status:** Accepted limitation, documented.
+
+### Polish pass: `git reset --hard` wiped in-progress App.tsx/app.css edits
+- **Found:** After syncing local with `git reset --hard origin/main`, the polish worker's modifications to `App.tsx` and `app.css` were lost (new files survived as untracked).
+- **Why:** `reset --hard` discards all uncommitted changes to tracked files. The worker was still running.
+- **Fix:** Worker re-applied App.tsx changes post-reset (verified 8 integration points present). Re-added `folio-shimmer` CSS manually to app.css. Lesson: never `reset --hard` while workers are still writing.
+- **Status:** Fixed. Verified via grep + typecheck.
